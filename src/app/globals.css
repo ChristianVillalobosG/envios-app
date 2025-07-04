@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@import "tailwindcss"; 
+
+
+
 
 :root {
   --background: #ffffff;
@@ -23,4 +26,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+
+.input {
+  @apply p-2 rounded border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm w-full;
 }
