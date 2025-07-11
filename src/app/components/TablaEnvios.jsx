@@ -1,43 +1,62 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/app/lib/supabase'
-import RegistroModal from './RegistroModal'
 import { Pencil, Trash2, Share2, ArrowUpDown } from 'lucide-react'
 import { toast } from 'sonner'
-import * as XLSX from 'xlsx'
-import { saveAs } from 'file-saver'
 import dayjs from 'dayjs'
+import RegistroEnvioForm from './RegistroEnvioForm'
+
+function Modal({ isOpen, onClose, title, children }) {
+  if (!isOpen) return null
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+        onClick={onClose}
+      />
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-6">
+        <div
+          className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto relative border border-gray-300"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <header className="flex justify-between items-center p-4 border-b border-gray-300">
+            <h2 className="text-2xl font-semibold text-gray-900">{title}</h2>
+            <button
+              onClick={onClose}
+              aria-label="Cerrar modal"
+              className="text-gray-600 hover:text-gray-900 text-3xl font-bold leading-none transition-colors"
+            >
+              ×
+            </button>
+          </header>
+          <section className="p-6">{children}</section>
+        </div>
+      </div>
+    </>
+  )
+}
 
 export default function TablaEnvios() {
   const [envios, setEnvios] = useState([])
-  const [enviosFiltrados, setEnviosFiltrados] = useState([])
-  const [modalOpen, setModalOpen] = useState(false)
-  const [envioEditando, setEnvioEditando] = useState(null)
-
-  // Filtros
   const [busqueda, setBusqueda] = useState('')
   const [fechaFiltro, setFechaFiltro] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
-
-  // Paginación
   const [paginaActual, setPaginaActual] = useState(1)
   const ITEMS_POR_PAGINA = 45
-
-  // Ordenamiento
   const [ordenCampo, setOrdenCampo] = useState('fecha')
-  const [ordenDireccion, setOrdenDireccion] = useState('desc') // 'asc' | 'desc'
+  const [ordenDireccion, setOrdenDireccion] = useState('desc')
 
-  // Fetch inicial
+  const [modalOpen, setModalOpen] = useState(false)
+  const [envioEditando, setEnvioEditando] = useState(null)
+
+  const [enviosEnviados, setEnviosEnviados] = useState(new Set())
+
   const fetchEnvios = async () => {
-    const { data, error } = await supabase
-      .from('envios')
-      .select('*')
-
+    const { data, error } = await supabase.from('envios').select('*')
     if (error) {
-      console.error(error)
+      toast.error('Error cargando envíos')
       return
     }
-
     setEnvios(data)
   }
 
@@ -50,11 +69,9 @@ export default function TablaEnvios() {
     return () => supabase.removeChannel(canal)
   }, [])
 
-  // Filtro y ordenamiento memorizados para optimizar render
   const enviosFiltradosOrdenados = useMemo(() => {
     let datos = [...envios]
 
-    // Filtros
     if (busqueda.trim() !== '') {
       const filtro = busqueda.toLowerCase()
       datos = datos.filter((e) =>
@@ -63,33 +80,23 @@ export default function TablaEnvios() {
         )
       )
     }
+    if (fechaFiltro) datos = datos.filter((e) => e.fecha === fechaFiltro)
+    if (estadoFiltro) datos = datos.filter((e) => e.estado === estadoFiltro)
 
-    if (fechaFiltro) {
-      datos = datos.filter((e) => e.fecha === fechaFiltro)
-    }
-
-    if (estadoFiltro) {
-      datos = datos.filter((e) => e.estado === estadoFiltro)
-    }
-
-    // Ordenamiento
     datos.sort((a, b) => {
       let valA = a[ordenCampo]
       let valB = b[ordenCampo]
 
-      // Para fecha, transformamos a Date para comparar
       if (ordenCampo === 'fecha') {
         valA = new Date(valA)
         valB = new Date(valB)
       }
-      // Para hora, convertir a minutos para comparación
       if (ordenCampo === 'hora') {
         const [ha, ma] = valA.split(':').map(Number)
         const [hb, mb] = valB.split(':').map(Number)
         valA = ha * 60 + ma
         valB = hb * 60 + mb
       }
-
       if (valA < valB) return ordenDireccion === 'asc' ? -1 : 1
       if (valA > valB) return ordenDireccion === 'asc' ? 1 : -1
       return 0
@@ -98,29 +105,23 @@ export default function TablaEnvios() {
     return datos
   }, [envios, busqueda, fechaFiltro, estadoFiltro, ordenCampo, ordenDireccion])
 
-  // Paginación
   const totalPaginas = Math.ceil(enviosFiltradosOrdenados.length / ITEMS_POR_PAGINA)
   const enviosPagina = enviosFiltradosOrdenados.slice(
     (paginaActual - 1) * ITEMS_POR_PAGINA,
     paginaActual * ITEMS_POR_PAGINA
   )
 
-  // Cambiar estado sin mover fila
   const cambiarEstado = async (id, nuevoEstado) => {
     const { error } = await supabase.from('envios').update({ estado: nuevoEstado }).eq('id', id)
     if (error) {
       toast.error('Error al actualizar estado')
       return
     }
-    // Actualizar localmente para no perder posición ni hacer fetch completo
     setEnvios((prev) =>
-      prev.map((envio) =>
-        envio.id === id ? { ...envio, estado: nuevoEstado } : envio
-      )
+      prev.map((envio) => (envio.id === id ? { ...envio, estado: nuevoEstado } : envio))
     )
   }
 
-  // Eliminar con confirmación
   const eliminarEnvio = async (id) => {
     toast.warning('¿Estás seguro de eliminar este envío?', {
       action: {
@@ -139,25 +140,26 @@ export default function TablaEnvios() {
     })
   }
 
-  // Compartir por Whatsapp
   const compartirWhatsapp = (envio) => {
     const mensaje = `
 📦 *Detalle del Envío*
-🧑 Cliente: ${envio.cliente}
-🏞 Provincia: ${envio.provincia}
-📞 Teléfono: ${envio.telefono}
-📍 Ubicación: ${envio.ubicacion}
-📦 Descripción: ${envio.descripcion}
-🚚 Mensajero: ${envio.mensajero}
-📅 Fecha: ${envio.fecha}
-🕐 Hora: ${envio.hora}
-📌 Estado: ${envio.estado}
+🧑 Cliente: ${envio.cliente || 'N/A'}
+🏞 Provincia: ${envio.provincia || 'N/A'}
+📞 Teléfono: ${envio.telefono || 'N/A'}
+📍 Ubicación: ${envio.ubicacion || 'N/A'}
+📦 Descripción: ${envio.descripcion || 'N/A'}
+🚚 Mensajero: ${envio.mensajero || 'N/A'}
+📅 Fecha: ${dayjs(envio.fecha).format('DD/MM/YYYY')}
+🕐 Hora: ${envio.hora || 'N/A'}
+📌 Estado: ${envio.estado || 'N/A'}
     `.trim()
-    const link = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(link, '_blank')
+
+    const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
+    window.open(url, '_blank')
+
+    setEnviosEnviados(prev => new Set(prev).add(envio.id))
   }
 
-  // Generar link Google Maps
   const generarLinkGoogleMaps = (ubicacion) => {
     if (!ubicacion) return '#'
     const esURL = ubicacion.startsWith('http://') || ubicacion.startsWith('https://')
@@ -165,7 +167,6 @@ export default function TablaEnvios() {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ubicacion)}`
   }
 
-  // Cambiar campo y dirección de ordenamiento
   const cambiarOrden = (campo) => {
     if (ordenCampo === campo) {
       setOrdenDireccion(ordenDireccion === 'asc' ? 'desc' : 'asc')
@@ -175,54 +176,34 @@ export default function TablaEnvios() {
     }
   }
 
-  // Exportar a Excel
-  const exportAllExcel = async () => {
-    const datosFormateados = enviosFiltradosOrdenados.map(envio => ({
-      'Cliente': envio.cliente,
-      'Provincia': envio.provincia,
-      'Teléfono': envio.telefono,
-      'Ubicación': envio.ubicacion,
-      'Descripción': envio.descripcion,
-      'Mensajero': envio.mensajero,
-      'Estado': envio.estado,
-      'Fecha': dayjs(envio.fecha).format('DD/MM/YYYY'),
-      'Hora': envio.hora,
-    }))
+  const abrirEditarEnvio = (envio) => {
+    setEnvioEditando(envio)
+    setModalOpen(true)
+  }
 
-    const ws = XLSX.utils.json_to_sheet(datosFormateados, { origin: 'A1' })
+  const cerrarModal = () => {
+    setModalOpen(false)
+    setEnvioEditando(null)
+  }
 
-    // Ajustar ancho de columnas mínimo 15 caracteres
-    const encabezados = Object.keys(datosFormateados[0] || {})
-    ws['!cols'] = encabezados.map(key => ({ wch: Math.max(key.length + 2, 15) }))
-
-    // Negrita en encabezados (básico)
-    encabezados.forEach((_, idx) => {
-      const cell = XLSX.utils.encode_cell({ r: 0, c: idx })
-      if (ws[cell]) {
-        ws[cell].s = { font: { bold: true } }
-      }
-    })
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Envíos')
-
-    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-    saveAs(new Blob([buf]), 'envios.xlsx')
+  const guardarEnvio = () => {
+    fetchEnvios()
+    cerrarModal()
   }
 
   return (
-    <div className="mt-8 overflow-x-auto rounded-xl shadow-md">
-      {/* FILTROS */}
-      <div className="flex flex-col md:flex-row items-center justify-between mb-4 gap-2">
+    <div className="mt-8 overflow-x-auto rounded-xl shadow-lg bg-white text-zinc-900 font-sans">
+      {/* Barra de búsqueda y filtros */}
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between px-6 py-4 border-b border-gray-300">
         <input
           type="text"
-          placeholder="Buscar por cliente, provincia, mensajero..."
+          placeholder="Buscar envíos..."
           value={busqueda}
           onChange={(e) => {
             setBusqueda(e.target.value)
             setPaginaActual(1)
           }}
-          className="w-full md:w-1/3 px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded shadow-sm bg-white dark:bg-zinc-800 text-sm"
+          className="w-full md:max-w-xs px-4 py-2 rounded-md bg-white border border-gray-300 text-zinc-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         />
 
         <input
@@ -232,7 +213,7 @@ export default function TablaEnvios() {
             setFechaFiltro(e.target.value)
             setPaginaActual(1)
           }}
-          className="px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded shadow-sm bg-white dark:bg-zinc-800 text-sm"
+          className="px-4 py-2 rounded-md bg-white border border-gray-300 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         />
 
         <select
@@ -241,39 +222,17 @@ export default function TablaEnvios() {
             setEstadoFiltro(e.target.value)
             setPaginaActual(1)
           }}
-          className="px-4 py-2 border border-zinc-300 dark:border-zinc-700 rounded shadow-sm bg-white dark:bg-zinc-800 text-sm"
+          className="px-4 py-2 rounded-md bg-white border border-gray-300 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         >
           <option value="">Todos los estados</option>
           <option value="En la mañana">En la mañana</option>
           <option value="En la tarde">En la tarde</option>
           <option value="Mañana">Mañana</option>
         </select>
-
-        {(busqueda || fechaFiltro || estadoFiltro) && (
-          <button
-            onClick={() => {
-              setBusqueda('')
-              setFechaFiltro('')
-              setEstadoFiltro('')
-              setPaginaActual(1)
-            }}
-            className="text-sm px-3 py-2 rounded bg-red-500 text-white hover:bg-red-600"
-          >
-            Limpiar filtros
-          </button>
-        )}
-
-        <button
-          onClick={exportAllExcel}
-          className="text-sm px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-        >
-          Exportar Excel
-        </button>
       </div>
 
-      {/* TABLA */}
-      <table className="min-w-full text-sm text-left bg-white dark:bg-zinc-900 border-collapse">
-        <thead className="bg-zinc-100 dark:bg-zinc-800 uppercase text-xs text-zinc-700 dark:text-zinc-300">
+      <table className="min-w-full text-sm text-left border-collapse">
+        <thead className="bg-gray-100 text-zinc-700 uppercase text-xs font-semibold tracking-wide border-b border-gray-300">
           <tr>
             {[
               { label: 'Cliente', campo: 'cliente' },
@@ -285,7 +244,7 @@ export default function TablaEnvios() {
               { label: 'Estado', campo: 'estado' },
               { label: 'Fecha', campo: 'fecha' },
               { label: 'Hora', campo: 'hora' },
-              { label: 'Acciones', campo: null },
+              { label: 'Acciones', campo: null }
             ].map(({ label, campo }) => (
               <th
                 key={label}
@@ -296,7 +255,7 @@ export default function TablaEnvios() {
                 <div className="flex items-center gap-1">
                   {label}
                   {campo && ordenCampo === campo && (
-                    <ArrowUpDown size={14} className="inline" />
+                    <ArrowUpDown size={14} className={`inline transition-transform ${ordenDireccion === 'desc' ? 'rotate-180' : ''}`} />
                   )}
                 </div>
               </th>
@@ -307,7 +266,7 @@ export default function TablaEnvios() {
         <tbody>
           {enviosPagina.length === 0 ? (
             <tr>
-              <td colSpan={10} className="text-center p-4 text-zinc-500">
+              <td colSpan={10} className="text-center p-6 text-gray-500">
                 No hay registros que mostrar
               </td>
             </tr>
@@ -315,7 +274,7 @@ export default function TablaEnvios() {
             enviosPagina.map((envio) => (
               <tr
                 key={envio.id}
-                className="border-t hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+                className="border-b border-gray-300 hover:bg-gray-100 transition-colors duration-200"
               >
                 <td className="p-3">{envio.cliente}</td>
                 <td className="p-3">{envio.provincia}</td>
@@ -325,54 +284,75 @@ export default function TablaEnvios() {
                     href={generarLinkGoogleMaps(envio.ubicacion)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 underline"
+                    className="text-blue-600 hover:underline transition-colors"
+                    title="Ver en Google Maps"
                   >
                     Ver
                   </a>
                 </td>
                 <td className="p-3">{envio.descripcion}</td>
                 <td className="p-3">{envio.mensajero}</td>
-                <td className="p-3">
+                <td className="p-3 flex items-center gap-2">
                   <select
                     value={envio.estado}
                     onChange={(e) => cambiarEstado(envio.id, e.target.value)}
-                    className={`px-2 py-1 rounded text-xs font-semibold text-white
-                      ${envio.estado === 'En la mañana' ? 'bg-green-500' :
-                        envio.estado === 'En la tarde' ? 'bg-yellow-500 text-black' :
-                          'bg-blue-500'}
+                    className={`px-2 py-1 rounded text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-white appearance-none cursor-pointer transition-colors
+                      ${
+                        envio.estado === 'En la mañana'
+                          ? 'bg-green-200 text-green-800 focus:ring-green-500'
+                          : envio.estado === 'En la tarde'
+                          ? 'bg-yellow-200 text-yellow-800 focus:ring-yellow-400'
+                          : 'bg-blue-200 text-blue-800 focus:ring-blue-500'
+                      }
                     `}
                   >
                     <option value="En la mañana">En la mañana</option>
                     <option value="En la tarde">En la tarde</option>
                     <option value="Mañana">Mañana</option>
                   </select>
+                  {enviosEnviados.has(envio.id) && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-700 bg-opacity-80 px-2 py-0.5 text-xs font-semibold text-green-100 select-none">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                        aria-hidden="true"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Enviado
+                    </span>
+                  )}
                 </td>
                 <td className="p-3">{dayjs(envio.fecha).format('DD/MM/YYYY')}</td>
                 <td className="p-3">{envio.hora}</td>
-                <td className="p-3 flex gap-2 justify-center items-center">
+                <td className="p-3 flex gap-3 justify-center items-center">
                   <button
-                    onClick={() => {
-                      setEnvioEditando(envio)
-                      setModalOpen(true)
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full"
+                    onClick={() => abrirEditarEnvio(envio)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full transition-transform duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400"
                     title="Editar"
+                    aria-label="Editar envío"
                   >
-                    <Pencil size={16} />
+                    <Pencil size={20} />
                   </button>
                   <button
                     onClick={() => eliminarEnvio(envio.id)}
-                    className="bg-red-600 hover:bg-red-700 text-white p-1.5 rounded-full"
+                    className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-full transition-transform duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-400"
                     title="Eliminar"
+                    aria-label="Eliminar envío"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={20} />
                   </button>
                   <button
                     onClick={() => compartirWhatsapp(envio)}
-                    className="bg-green-600 hover:bg-green-700 text-white p-1.5 rounded-full"
+                    className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-full transition-transform duration-200 transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-green-400"
                     title="Compartir por WhatsApp"
+                    aria-label="Compartir por WhatsApp"
                   >
-                    <Share2 size={16} />
+                    <Share2 size={20} />
                   </button>
                 </td>
               </tr>
@@ -381,13 +361,12 @@ export default function TablaEnvios() {
         </tbody>
       </table>
 
-      {/* PAGINACION */}
       {totalPaginas > 1 && (
-        <div className="flex justify-center items-center mt-4 gap-2 text-sm">
+        <div className="flex justify-center items-center mt-6 mb-4 gap-2 text-sm">
           <button
             onClick={() => setPaginaActual((p) => Math.max(1, p - 1))}
             disabled={paginaActual === 1}
-            className="px-3 py-1 rounded bg-zinc-300 hover:bg-zinc-400 disabled:opacity-50"
+            className="px-3 py-1 rounded bg-gray-300 hover:bg-gray-400 disabled:opacity-50 text-gray-700 transition-colors"
           >
             Anterior
           </button>
@@ -399,8 +378,10 @@ export default function TablaEnvios() {
                 key={num}
                 onClick={() => setPaginaActual(num)}
                 className={`px-3 py-1 rounded ${
-                  num === paginaActual ? 'bg-blue-600 text-white' : 'bg-zinc-300 hover:bg-zinc-400'
-                }`}
+                  num === paginaActual
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-300 hover:bg-gray-400 text-gray-700'
+                } transition-colors`}
               >
                 {num}
               </button>
@@ -410,23 +391,21 @@ export default function TablaEnvios() {
           <button
             onClick={() => setPaginaActual((p) => Math.min(totalPaginas, p + 1))}
             disabled={paginaActual === totalPaginas}
-            className="px-3 py-1 rounded bg-zinc-300 hover:bg-zinc-400 disabled:opacity-50"
+            className="px-3 py-1 rounded bg-gray-300 hover:bg-gray-400 disabled:opacity-50 text-gray-700 transition-colors"
           >
             Siguiente
           </button>
         </div>
       )}
 
-      {/* MODAL */}
-      <RegistroModal
-        isOpen={modalOpen}
-        onClose={() => {
-          setModalOpen(false)
-          setEnvioEditando(null)
-        }}
-        initialData={envioEditando}
-        onSave={fetchEnvios}
-      />
+      <Modal isOpen={modalOpen} onClose={cerrarModal} title={envioEditando ? 'Editar Envío' : 'Nuevo Envío'}>
+        <RegistroEnvioForm
+          initialData={envioEditando}
+          onSave={guardarEnvio}
+          onCancel={cerrarModal}
+          modo="columnas"
+        />
+      </Modal>
     </div>
   )
 }
