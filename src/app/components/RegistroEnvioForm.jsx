@@ -4,13 +4,16 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo = 'lineal' }) {
+  const mensajeros = ["jose", "gary", "jeremy", "uber", "otro"]
+  const [otroMensajero, setOtroMensajero] = useState('')
+
   const [form, setForm] = useState({
     cliente: '',
     provincia: '',
     telefono: '',
     ubicacion: '',
     descripcion: '',
-    mensajero: '',
+    mensajero: 'jose', // valor inicial para evitar campo vacío
     estado: 'En la mañana',
     fecha: '',
     hora: ''
@@ -20,13 +23,26 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
 
   useEffect(() => {
     if (initialData) {
-      setForm(initialData)
+      if (!mensajeros.includes(initialData.mensajero)) {
+        setForm(prev => ({ ...prev, ...initialData, mensajero: "otro" }))
+        setOtroMensajero(initialData.mensajero || '')
+      } else {
+        setForm(initialData)
+        setOtroMensajero('')
+      }
     } else {
       const now = new Date()
       const hoy = now.toISOString().split('T')[0]
       const hora = now.toTimeString().slice(0, 5)
-      setForm(prev => ({ ...prev, fecha: hoy, hora }))
+      setForm(prev => ({
+        ...prev,
+        mensajero: 'jose',
+        fecha: hoy,
+        hora
+      }))
+      setOtroMensajero('')
     }
+    // eslint-disable-next-line
   }, [initialData])
 
   function formatearHoraParaPostgres(horaInput) {
@@ -58,13 +74,18 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       return
     }
 
-    // Copia del formulario para manipular
+    if (form.mensajero === "otro" && !otroMensajero.trim()) {
+      toast.error('Por favor escribe el nombre del mensajero.')
+      setCargando(false)
+      return
+    }
+
     const nuevoEnvio = {
       ...form,
+      mensajero: form.mensajero === "otro" ? otroMensajero.trim() : form.mensajero,
       hora: formatearHoraParaPostgres(form.hora)
     }
 
-    // Si es creación, asignar fecha y hora actual
     if (modo === 'crear') {
       const now = new Date()
       const hoy = now.toISOString().split('T')[0]
@@ -99,7 +120,6 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         } else {
           toast.success('✅ Envío agregado correctamente')
 
-          // Reiniciar formulario con fecha y hora actual
           const now = new Date()
           const hoy = now.toISOString().split('T')[0]
           const horaActual = now.toTimeString().slice(0, 5)
@@ -110,11 +130,12 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
             telefono: '',
             ubicacion: '',
             descripcion: '',
-            mensajero: '',
+            mensajero: 'jose', // restablecer a valor por defecto
             estado: 'En la mañana',
             fecha: hoy,
             hora: horaActual
           })
+          setOtroMensajero('')
 
           onSave && onSave()
           onCancel && onCancel()
@@ -176,14 +197,38 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         placeholder="Descripción"
         className="min-w-[180px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
       />
-      <input
-        type="text"
-        name="mensajero"
-        value={form.mensajero}
-        onChange={handleChange}
-        placeholder="Mensajero"
-        className="min-w-[130px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      />
+
+      {/* Mensajero: select + input cuando es "otro" */}
+      <div className="flex flex-col min-w-[130px]">
+        <select
+          name="mensajero"
+          value={form.mensajero}
+          onChange={e => {
+            setForm(prev => ({ ...prev, mensajero: e.target.value }))
+            if (e.target.value !== "otro") setOtroMensajero("")
+          }}
+          className="px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
+        >
+          {mensajeros.map(m => (
+            <option key={m} value={m}>
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </option>
+          ))}
+        </select>
+        {form.mensajero === "otro" && (
+          <input
+            type="text"
+            name="otroMensajero"
+            value={otroMensajero}
+            onChange={e => setOtroMensajero(e.target.value)}
+            placeholder="Escribe el nombre"
+            className="mt-2 px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
+            autoFocus
+            required
+          />
+        )}
+      </div>
+
       <select
         name="estado"
         value={form.estado}
