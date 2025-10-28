@@ -4,67 +4,77 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo = 'lineal' }) {
-  const mensajeros = ["jose", "gary", "jeremy", "uber", "otro"]
-  const [otroMensajero, setOtroMensajero] = useState('')
-
+  const mensajeros = ['jose', 'gary', 'jeremy', 'chris', 'uber', 'otro']
   const [form, setForm] = useState({
     cliente: '',
     provincia: '',
     telefono: '',
     ubicacion: '',
     descripcion: '',
-    mensajero: 'jose', // valor inicial para evitar campo vacío
+    mensajero: 'jose',
     estado: 'En la mañana',
     fecha: '',
     hora: ''
   })
-
   const [cargando, setCargando] = useState(false)
 
   useEffect(() => {
     if (initialData) {
       if (!mensajeros.includes(initialData.mensajero)) {
-        setForm(prev => ({ ...prev, ...initialData, mensajero: "otro" }))
-        setOtroMensajero(initialData.mensajero || '')
+        setForm(prev => ({ ...prev, ...initialData, mensajero: initialData.mensajero }))
       } else {
         setForm(initialData)
-        setOtroMensajero('')
       }
     } else {
       const now = new Date()
-      const hoy = now.toISOString().split('T')[0]
+      const hoy = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString()
+        .split('T')[0]
       const hora = now.toTimeString().slice(0, 5)
-      setForm(prev => ({
-        ...prev,
+      setForm({
+        cliente: '',
+        provincia: '',
+        telefono: '',
+        ubicacion: '',
+        descripcion: '',
         mensajero: 'jose',
+        estado: 'En la mañana',
         fecha: hoy,
         hora
-      }))
-      setOtroMensajero('')
+      })
     }
-    // eslint-disable-next-line
   }, [initialData])
 
   function formatearHoraParaPostgres(horaInput) {
     if (/^\d{2}:\d{2}(:\d{2})?$/.test(horaInput)) {
       return horaInput.length === 5 ? horaInput + ':00' : horaInput
     }
-    const horaClean = horaInput.replace('p. m.', 'PM').replace('a. m.', 'AM')
-    const date = new Date('1970-01-01T' + horaClean)
-    if (!isNaN(date)) {
-      const h = String(date.getHours()).padStart(2, '0')
-      const m = String(date.getMinutes()).padStart(2, '0')
-      const s = String(date.getSeconds()).padStart(2, '0')
-      return `${h}:${m}:${s}`
-    }
     return '00:00:00'
   }
 
+  // ✅ Cambia fecha automáticamente según estado seleccionado
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm(prev => ({ ...prev, [name]: value }))
+
+    if (name === 'estado') {
+      const hoy = new Date()
+      const hoyLocal = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000)
+      const fechaHoy = hoyLocal.toISOString().split('T')[0]
+
+      if (value === 'Mañana') {
+        const manana = new Date(hoyLocal)
+        manana.setDate(manana.getDate() + 1)
+        const fechaManana = manana.toISOString().split('T')[0]
+        setForm(prev => ({ ...prev, estado: value, fecha: fechaManana }))
+      } else {
+        setForm(prev => ({ ...prev, estado: value, fecha: fechaHoy }))
+      }
+    } else {
+      setForm(prev => ({ ...prev, [name]: value }))
+    }
   }
 
+  // ✅ Guarda el envío en Supabase
   const handleGuardar = async (modo) => {
     setCargando(true)
 
@@ -74,24 +84,9 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       return
     }
 
-    if (form.mensajero === "otro" && !otroMensajero.trim()) {
-      toast.error('Por favor escribe el nombre del mensajero.')
-      setCargando(false)
-      return
-    }
-
     const nuevoEnvio = {
       ...form,
-      mensajero: form.mensajero === "otro" ? otroMensajero.trim() : form.mensajero,
       hora: formatearHoraParaPostgres(form.hora)
-    }
-
-    if (modo === 'crear') {
-      const now = new Date()
-      const hoy = now.toISOString().split('T')[0]
-      const horaActual = now.toTimeString().slice(0, 5) + ':00'
-      nuevoEnvio.fecha = hoy
-      nuevoEnvio.hora = horaActual
     }
 
     try {
@@ -100,45 +95,21 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
           .from('envios')
           .update(nuevoEnvio)
           .eq('id', initialData.id)
-
-        if (error) {
-          toast.error(`❌ Error al actualizar: ${error.message}`)
-        } else {
+        if (error) toast.error(`❌ Error al actualizar: ${error.message}`)
+        else {
           toast.success('✏️ Envío actualizado correctamente')
-          onSave && onSave()
-          onCancel && onCancel()
+          onSave?.()
+          onCancel?.()
         }
       } else {
         if ('id' in nuevoEnvio) delete nuevoEnvio.id
 
-        const { error } = await supabase
-          .from('envios')
-          .insert([nuevoEnvio])
-
-        if (error) {
-          toast.error(`❌ Error al guardar: ${error.message}`)
-        } else {
+        const { error } = await supabase.from('envios').insert([nuevoEnvio])
+        if (error) toast.error(`❌ Error al guardar: ${error.message}`)
+        else {
           toast.success('✅ Envío agregado correctamente')
-
-          const now = new Date()
-          const hoy = now.toISOString().split('T')[0]
-          const horaActual = now.toTimeString().slice(0, 5)
-
-          setForm({
-            cliente: '',
-            provincia: '',
-            telefono: '',
-            ubicacion: '',
-            descripcion: '',
-            mensajero: 'jose', // restablecer a valor por defecto
-            estado: 'En la mañana',
-            fecha: hoy,
-            hora: horaActual
-          })
-          setOtroMensajero('')
-
-          onSave && onSave()
-          onCancel && onCancel()
+          onSave?.()
+          onCancel?.()
         }
       }
     } catch (err) {
@@ -150,160 +121,55 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
 
   const containerClass =
     modo === 'lineal'
-      ? 'flex items-center gap-3 overflow-x-auto p-4 bg-white dark:bg-zinc-900 rounded-xl shadow-md max-w-full'
-      : 'grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white dark:bg-zinc-900 rounded-xl shadow-md max-w-full'
+      ? 'flex items-center gap-3 overflow-x-auto p-4 bg-white rounded-xl shadow-md'
+      : 'grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white rounded-xl shadow-md'
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className={containerClass}>
-      {/* Campos */}
-      <input
-        type="text"
-        name="cliente"
-        value={form.cliente}
-        onChange={handleChange}
-        placeholder="Cliente"
-        className="min-w-[150px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-        required
-      />
-      <input
-        type="text"
-        name="provincia"
-        value={form.provincia}
-        onChange={handleChange}
-        placeholder="Provincia"
-        className="min-w-[120px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      />
-      <input
-        type="tel"
-        name="telefono"
-        value={form.telefono}
-        onChange={handleChange}
-        placeholder="Teléfono"
-        className="min-w-[130px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      />
-      <input
-        type="text"
-        name="ubicacion"
-        value={form.ubicacion}
-        onChange={handleChange}
-        placeholder="Ubicación / Google Maps"
-        className="min-w-[180px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      />
-      <input
-        type="text"
-        name="descripcion"
-        value={form.descripcion}
-        onChange={handleChange}
-        placeholder="Descripción"
-        className="min-w-[180px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      />
+      <input type="text" name="cliente" value={form.cliente} onChange={handleChange} placeholder="Cliente" className="min-w-[150px] px-3 py-2 border rounded" required />
+      <input type="text" name="provincia" value={form.provincia} onChange={handleChange} placeholder="Provincia" className="min-w-[120px] px-3 py-2 border rounded" />
+      <input type="tel" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Teléfono" className="min-w-[130px] px-3 py-2 border rounded" />
+      <input type="text" name="ubicacion" value={form.ubicacion} onChange={handleChange} placeholder="Ubicación / Google Maps" className="min-w-[180px] px-3 py-2 border rounded" />
+      <input type="text" name="descripcion" value={form.descripcion} onChange={handleChange} placeholder="Descripción" className="min-w-[180px] px-3 py-2 border rounded" />
 
-      {/* Mensajero: select + input cuando es "otro" */}
+      {/* Mensajero */}
       <div className="flex flex-col min-w-[130px]">
         <select
           name="mensajero"
-          value={form.mensajero}
+          value={mensajeros.includes(form.mensajero) ? form.mensajero : 'otro'}
           onChange={e => {
-            setForm(prev => ({ ...prev, mensajero: e.target.value }))
-            if (e.target.value !== "otro") setOtroMensajero("")
+            const valor = e.target.value
+            setForm(prev => ({ ...prev, mensajero: valor === 'otro' ? '' : valor }))
           }}
-          className="px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
+          className="px-3 py-2 border rounded"
         >
           {mensajeros.map(m => (
-            <option key={m} value={m}>
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </option>
+            <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
           ))}
         </select>
-        {form.mensajero === "otro" && (
-          <input
-            type="text"
-            name="otroMensajero"
-            value={otroMensajero}
-            onChange={e => setOtroMensajero(e.target.value)}
-            placeholder="Escribe el nombre"
-            className="mt-2 px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-            autoFocus
-            required
-          />
-        )}
+    
       </div>
 
-      <select
-        name="estado"
-        value={form.estado}
-        onChange={handleChange}
-        className="min-w-[130px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-      >
+      <select name="estado" value={form.estado} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded">
         <option>En la mañana</option>
         <option>En la tarde</option>
         <option>Mañana</option>
       </select>
-      <input
-        type="date"
-        name="fecha"
-        value={form.fecha}
-        onChange={handleChange}
-        className="min-w-[130px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-        required
-      />
-      <input
-        type="time"
-        name="hora"
-        value={form.hora}
-        onChange={handleChange}
-        className="min-w-[110px] px-3 py-2 border rounded bg-white dark:bg-zinc-800 border-zinc-300 dark:border-zinc-600 text-sm"
-        required
-      />
 
-      {/* Botones */}
+      <input type="date" name="fecha" value={form.fecha} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded" required />
+      <input type="time" name="hora" value={form.hora} onChange={handleChange} className="min-w-[110px] px-3 py-2 border rounded" required />
+
       <div className="flex items-center gap-4">
         {initialData && (
-          <button
-            type="button"
-            disabled={cargando}
-            onClick={() => handleGuardar('actualizar')}
-            title="Actualizar"
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={3}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            <span className="select-none font-semibold">Actualizar</span>
+          <button type="button" disabled={cargando} onClick={() => handleGuardar('actualizar')} className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50">
+            Actualizar
           </button>
         )}
-        <button
-          type="button"
-          disabled={cargando}
-          onClick={() => handleGuardar('crear')}
-          title="Crear nuevo"
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={3}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          <span className="select-none font-semibold">Crear</span>
+        <button type="button" disabled={cargando} onClick={() => handleGuardar('crear')} className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50">
+          Crear
         </button>
         {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded"
-          >
+          <button type="button" onClick={onCancel} className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded">
             Cancelar
           </button>
         )}
