@@ -4,10 +4,9 @@ import { supabase } from '@/app/lib/supabase'
 import { Pencil, Trash2, Share2, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import dayjs from 'dayjs'
-import RegistroEnvioForm from './RegistroEnvioForm' 
+import RegistroEnvioForm from './RegistroEnvioForm'
 import * as XLSX from "xlsx"
 import { saveAs } from "file-saver"
-
 
 function Modal({ isOpen, onClose, title, children }) {
   if (!isOpen) return null
@@ -41,8 +40,11 @@ export default function TablaEnvios() {
   const [busqueda, setBusqueda] = useState('')
   const [fechaFiltro, setFechaFiltro] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
+
+  // ✅ PAGINACIÓN
   const [paginaActual, setPaginaActual] = useState(1)
   const ITEMS_POR_PAGINA = 45
+
   const [ordenCampo, setOrdenCampo] = useState('fecha')
   const [ordenDireccion, setOrdenDireccion] = useState('desc')
 
@@ -72,14 +74,15 @@ export default function TablaEnvios() {
 
     if (busqueda.trim() !== '') {
       const filtro = busqueda.toLowerCase()
-      datos = datos.filter((e) =>
-        Object.values(e).some((campo) =>
+      datos = datos.filter(e =>
+        Object.values(e).some(campo =>
           String(campo).toLowerCase().includes(filtro)
         )
       )
     }
-    if (fechaFiltro) datos = datos.filter((e) => e.fecha === fechaFiltro)
-    if (estadoFiltro) datos = datos.filter((e) => e.estado === estadoFiltro)
+
+    if (fechaFiltro) datos = datos.filter(e => e.fecha === fechaFiltro)
+    if (estadoFiltro) datos = datos.filter(e => e.estado === estadoFiltro)
 
     datos.sort((a, b) => {
       let valA = a[ordenCampo]
@@ -89,7 +92,7 @@ export default function TablaEnvios() {
         valA = new Date(valA)
         valB = new Date(valB)
       }
-      if (ordenCampo === 'hora') {
+      if (ordenCampo === 'hora' && valA && valB) {
         const [ha, ma] = valA.split(':').map(Number)
         const [hb, mb] = valB.split(':').map(Number)
         valA = ha * 60 + ma
@@ -103,68 +106,48 @@ export default function TablaEnvios() {
     return datos
   }, [envios, busqueda, fechaFiltro, estadoFiltro, ordenCampo, ordenDireccion])
 
+  // ✅ PAGINACIÓN FINAL
   const totalPaginas = Math.ceil(enviosFiltradosOrdenados.length / ITEMS_POR_PAGINA)
   const enviosPagina = enviosFiltradosOrdenados.slice(
     (paginaActual - 1) * ITEMS_POR_PAGINA,
     paginaActual * ITEMS_POR_PAGINA
   )
 
-  // ✅ Actualiza fecha automáticamente según el estado
+  useEffect(() => {
+    setPaginaActual(1)
+  }, [busqueda, fechaFiltro, estadoFiltro])
+
   const cambiarEstado = async (id, nuevoEstado) => {
     const hoy = dayjs().format('YYYY-MM-DD')
     const manana = dayjs().add(1, 'day').format('YYYY-MM-DD')
-
-    let nuevaFecha = hoy
-    if (nuevoEstado === 'Mañana') nuevaFecha = manana
+    const nuevaFecha = nuevoEstado === 'Mañana' ? manana : hoy
 
     const { error } = await supabase
       .from('envios')
       .update({ estado: nuevoEstado, fecha: nuevaFecha })
       .eq('id', id)
 
-    if (error) {
-      toast.error('Error al actualizar estado')
-      return
-    }
-
-    setEnvios((prev) =>
-      prev.map((envio) =>
-        envio.id === id
-          ? { ...envio, estado: nuevoEstado, fecha: nuevaFecha }
-          : envio
-      )
-    )
+    if (!error) {
+      setEnvios(prev => prev.map(e => e.id === id ? { ...e, estado: nuevoEstado, fecha: nuevaFecha } : e))
+    } else toast.error('Error al actualizar')
   }
 
   const cambiarMensajero = async (id, nuevoMensajero) => {
-    const { error } = await supabase
-      .from('envios')
-      .update({ mensajero: nuevoMensajero })
-      .eq('id', id)
-
-    if (error) {
-      toast.error('Error al actualizar mensajero')
-      return
+    const { error } = await supabase.from('envios').update({ mensajero: nuevoMensajero }).eq('id', id)
+    if (!error) {
+      setEnvios(prev => prev.map(e => e.id === id ? { ...e, mensajero: nuevoMensajero } : e))
     }
-
-    setEnvios((prev) =>
-      prev.map((envio) =>
-        envio.id === id ? { ...envio, mensajero: nuevoMensajero } : envio
-      )
-    )
   }
 
   const eliminarEnvio = async (id) => {
-    toast.warning('¿Estás seguro de eliminar este envío?', {
+    toast.warning('¿Eliminar envío?', {
       action: {
-        label: 'Sí, eliminar',
+        label: 'Sí',
         onClick: async () => {
           const { error } = await supabase.from('envios').delete().eq('id', id)
           if (!error) {
-            setEnvios((prev) => prev.filter((e) => e.id !== id))
-            toast.success('🗑️ Envío eliminado correctamente')
-          } else {
-            toast.error('Error al eliminar envío')
+            setEnvios(prev => prev.filter(e => e.id !== id))
+            toast.success('Eliminado')
           }
         }
       },
@@ -175,86 +158,40 @@ export default function TablaEnvios() {
   const compartirWhatsapp = (envio) => {
     const mensaje = `
 📦 *Detalle del Envío*
-🧑 Cliente: ${envio.cliente || 'N/A'}
-🏞 Provincia: ${envio.provincia || 'N/A'}
-📞 Teléfono: ${envio.telefono || 'N/A'}
-📍 Ubicación: ${envio.ubicacion || 'N/A'}
-📦 Descripción: ${envio.descripcion || 'N/A'}
-🚚 Mensajero: ${envio.mensajero || 'N/A'}
-📅 Fecha: ${dayjs(envio.fecha).format('DD/MM/YYYY')}
-🕐 Hora: ${envio.hora || 'N/A'}
-📌 Estado: ${envio.estado || 'N/A'}
+Cliente: ${envio.cliente}
+Provincia: ${envio.provincia}
+Tel: ${envio.telefono}
+Ubicación: ${envio.ubicacion}
+${envio.descripcion}
+Mensajero: ${envio.mensajero}
+Fecha: ${dayjs(envio.fecha).format('DD/MM/YYYY')}
+Hora: ${envio.hora}
+Estado: ${envio.estado}
     `.trim()
-
-    const url = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
-    window.open(url, '_blank')
+    window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank')
   }
 
-  const generarLinkGoogleMaps = (ubicacion) => {
-    if (!ubicacion) return '#'
-    const esURL = ubicacion.startsWith('http://') || ubicacion.startsWith('https://')
-    if (esURL) return ubicacion
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ubicacion)}`
-  }
-
-  const abrirEditarEnvio = (envio) => {
-    setEnvioEditando(envio)
-    setModalOpen(true)
-  }
-
-  const cerrarModal = () => {
-    setModalOpen(false)
-    setEnvioEditando(null)
-  }
-
-  const guardarEnvio = () => {
-    fetchEnvios()
-    cerrarModal()
-  }
-
-  // ✅ Mostrar texto dinámico según fecha
   const formatearFecha = (fecha) => {
     const hoy = dayjs().format('YYYY-MM-DD')
     const manana = dayjs().add(1, 'day').format('YYYY-MM-DD')
     const ayer = dayjs().subtract(1, 'day').format('YYYY-MM-DD')
-
     if (fecha === hoy) return 'Hoy'
     if (fecha === manana) return 'Mañana'
     if (fecha === ayer) return 'Ayer'
     return dayjs(fecha).format('DD/MM/YYYY')
   }
 
-  // ✅ Guardar check completado en base de datos
   const toggleCompletado = async (id, estadoActual) => {
-    const nuevoEstado = !estadoActual
-    const { error } = await supabase
-      .from('envios')
-      .update({ completado: nuevoEstado })
-      .eq('id', id)
+    const nuevo = !estadoActual
+    const { error } = await supabase.from('envios').update({ completado: nuevo }).eq('id', id)
+    if (!error) setEnvios(prev => prev.map(e => e.id === id ? { ...e, completado: nuevo } : e))
+  }
 
-    if (error) {
-      toast.error('Error al actualizar completado')
-      return
-    }
-
-    setEnvios((prev) =>
-      prev.map((envio) =>
-        envio.id === id ? { ...envio, completado: nuevoEstado } : envio
-      )
-    )
-  } 
-
-    // ✅ Exportar a Excel (filtrados o todos)
   const exportarExcel = (soloFiltrados = true) => {
-    const datosAExportar = soloFiltrados ? enviosFiltradosOrdenados : envios
+    const datos = soloFiltrados ? enviosFiltradosOrdenados : envios
+    if (!datos.length) return toast.error('No hay datos')
 
-    if (datosAExportar.length === 0) {
-      toast.error('No hay datos para exportar')
-      return
-    }
-
-    // Formatear datos para Excel
-    const datosFormateados = datosAExportar.map(e => ({
+    const formato = datos.map(e => ({
       Cliente: e.cliente,
       Provincia: e.provincia,
       Teléfono: e.telefono,
@@ -267,46 +204,39 @@ export default function TablaEnvios() {
       Completado: e.completado ? 'Sí' : 'No',
     }))
 
-    const hoja = XLSX.utils.json_to_sheet(datosFormateados)
+    const hoja = XLSX.utils.json_to_sheet(formato)
     const libro = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(libro, hoja, 'Envíos')
 
-    const nombreArchivo = soloFiltrados
-      ? `envios_filtrados_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
-      : `envios_todos_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
-
-    const excelBuffer = XLSX.write(libro, { bookType: 'xlsx', type: 'array' })
-    const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
-    saveAs(blob, nombreArchivo)
-
-    toast.success('📤 Archivo Excel generado correctamente')
+    saveAs(new Blob([XLSX.write(libro, { bookType: 'xlsx', type: 'array' })]),
+      `${soloFiltrados ? 'envios_filtrados' : 'envios_todos'}_${dayjs().format('YYYYMMDD_HHmm')}.xlsx`
+    )
+    toast.success('✅ Exportado')
   }
 
+  const abrirEditarEnvio = (envio) => { setEnvioEditando(envio); setModalOpen(true) }
+  const cerrarModal = () => { setModalOpen(false); setEnvioEditando(null) }
+  const guardarEnvio = () => { fetchEnvios(); cerrarModal() }
 
   return (
     <div className="mt-8 overflow-x-auto rounded-xl shadow-lg bg-white text-zinc-900 font-sans">
-      {/* 🔍 Filtros */}
+
+      {/* FILTROS */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between px-6 py-4 border-b border-gray-300">
         <input
           type="text"
-          placeholder="Buscar envíos..."
+          placeholder="Buscar..."
           value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value)
-            setPaginaActual(1)
-          }}
-          className="w-full md:max-w-xs px-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500"
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="w-full md:max-w-xs px-4 py-2 rounded-md border border-gray-300"
         />
-        <input
-          type="date"
-          value={fechaFiltro}
-          onChange={(e) => setFechaFiltro(e.target.value)}
-          className="px-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500"
+
+        <input type="date" value={fechaFiltro} onChange={(e) => setFechaFiltro(e.target.value)}
+          className="px-4 py-2 rounded-md border border-gray-300"
         />
-        <select
-          value={estadoFiltro}
-          onChange={(e) => setEstadoFiltro(e.target.value)}
-          className="px-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500"
+
+        <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}
+          className="px-4 py-2 rounded-md border border-gray-300"
         >
           <option value="">Todos los estados</option>
           <option value="En la mañana">En la mañana</option>
@@ -315,27 +245,22 @@ export default function TablaEnvios() {
         </select>
       </div>
 
-<div className="flex justify-end gap-3 px-6 py-3 border-b border-gray-300">
-  <button
-    onClick={() => exportarExcel(true)}
-    className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-md"
-  >
-    📋 Exportar filtrados
-  </button>
-  <button
-    onClick={() => exportarExcel(false)}
-    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md"
-  >
-    📦 Exportar todos
-  </button>
-</div>
+      {/* Exportación */}
+      <div className="flex justify-end gap-3 px-6 py-3 border-b border-gray-300">
+        <button onClick={() => exportarExcel(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md">
+          📋 Exportar filtrados
+        </button>
+        <button onClick={() => exportarExcel(false)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+          📦 Exportar todos
+        </button>
+      </div>
 
-      {/* 📋 Tabla */}
-      <table className="min-w-full text-sm text-left border-collapse">
+      {/* TABLA */}
+      <table className="min-w-full text-sm text-left">
         <thead className="bg-gray-200 uppercase text-xs font-bold text-zinc-900 border-b border-gray-500">
           <tr>
-            {['Cliente','Provincia','Teléfono','Ubicación','Descripción','Mensajero','Estado','Fecha','Hora','Acciones'].map(label => (
-              <th key={label} className="p-3">{label}</th>
+            {['Cliente','Provincia','Teléfono','Ubicación','Descripción','Mensajero','Estado','Fecha','Hora','Acciones'].map(txt => (
+              <th key={txt} className="p-3">{txt}</th>
             ))}
           </tr>
         </thead>
@@ -343,85 +268,113 @@ export default function TablaEnvios() {
         <tbody>
           {enviosPagina.length === 0 ? (
             <tr><td colSpan={10} className="text-center p-6 text-gray-500">No hay registros</td></tr>
-          ) : (
-            enviosPagina.map((envio) => (
-              <tr key={envio.id} className="border-b border-gray-300 hover:bg-gray-100">
-                <td className="p-3">{envio.cliente}</td>
-                <td className="p-3">{envio.provincia}</td>
-                <td className="p-3">{envio.telefono}</td>
-                <td className="p-3">
-                  <a href={generarLinkGoogleMaps(envio.ubicacion)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Ver</a>
-                </td>
-                <td className="p-3">{envio.descripcion}</td>
+          ) : enviosPagina.map(envio => (
+            <tr key={envio.id} className="border-b hover:bg-gray-100">
 
-                {/* Mensajero editable */}
-                <td className="p-3">
-                  <select
-                    value={envio.mensajero || ''}
-                    onChange={(e) => cambiarMensajero(envio.id, e.target.value)}
-                    className="border border-gray-300 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Seleccionar</option>
-                    {['jose', 'gary', 'jeremy', 'chris', 'uber', 'otro'].map(m => (
-                      <option key={m} value={m}>
-                        {m.charAt(0).toUpperCase() + m.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+              <td className="p-3">{envio.cliente}</td>
+              <td className="p-3">{envio.provincia}</td>
+              <td className="p-3">{envio.telefono}</td>
+              <td className="p-3">
+              {envio.ubicacion 
+  ? (
+      <a
+        href={(envio.ubicacion || "").startsWith("http")
+          ? envio.ubicacion
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(envio.ubicacion || "")}`
+        }
+        target="_blank"
+        className="text-blue-600 underline"
+      >
+        Ver
+      </a>
+    )
+  : <span className="text-gray-500">Sin ubicación</span>
+}
+              </td>
+              <td className="p-3">{envio.descripcion}</td>
 
-                {/* Estado con color y check completado */}
-                <td className="p-3 flex items-center gap-2">
-                  <select
-                    value={envio.estado}
-                    onChange={(e) => cambiarEstado(envio.id, e.target.value)}
-                    className={`px-2 py-1 rounded text-xs font-semibold cursor-pointer ${
-                      envio.estado === 'En la mañana'
-                        ? 'bg-green-200 text-green-800'
-                        : envio.estado === 'En la tarde'
-                        ? 'bg-yellow-200 text-yellow-800'
-                        : 'bg-blue-200 text-blue-800'
-                    }`}
-                  >
-                    <option>En la mañana</option>
-                    <option>En la tarde</option>
-                    <option>Mañana</option>
-                  </select>
+              <td className="p-3">
+                <select
+                  value={envio.mensajero || ''}
+                  onChange={(e) => cambiarMensajero(envio.id, e.target.value)}
+                  className="border rounded px-2 py-1"
+                >
+                  <option value="">Seleccionar</option>
+                  {['jose','gary','jeremy','chris','uber','otro'].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </td>
 
-                  <button
-                    onClick={() => toggleCompletado(envio.id, envio.completado)}
-                    className={`p-1.5 rounded-full border transition-all ${
-                      envio.completado
-                        ? 'bg-green-600 text-white border-green-600'
-                        : 'border-gray-400 text-gray-500 hover:bg-gray-200'
-                    }`}
-                    title="Marcar como completado"
-                  >
-                    <Check size={16} />
-                  </button>
-                </td>
+              <td className="p-3 flex items-center gap-2">
+                <select
+                  value={envio.estado}
+                  onChange={(e) => cambiarEstado(envio.id, e.target.value)}
+                  className={`px-2 py-1 rounded text-xs font-semibold ${
+                    envio.estado === 'En la mañana' ? 'bg-green-200 text-green-800'
+                    : envio.estado === 'En la tarde' ? 'bg-yellow-200 text-yellow-800'
+                    : 'bg-blue-200 text-blue-800'
+                  }`}
+                >
+                  <option>En la mañana</option>
+                  <option>En la tarde</option>
+                  <option>Mañana</option>
+                </select>
 
-                <td className="p-3">{formatearFecha(envio.fecha)}</td>
-                <td className="p-3">{envio.hora}</td>
+                <button
+                  onClick={() => toggleCompletado(envio.id, envio.completado)}
+                  className={`p-1.5 rounded-full border ${
+                    envio.completado ? 'bg-green-600 text-white border-green-600' : 'border-gray-400 text-gray-500'
+                  }`}
+                >
+                  <Check size={16}/>
+                </button>
+              </td>
 
-                <td className="p-3 flex gap-3 justify-center">
-                  <button onClick={() => abrirEditarEnvio(envio)} className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-full">
-                    <Pencil size={18} />
-                  </button>
-                  <button onClick={() => eliminarEnvio(envio.id)} className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-full">
-                    <Trash2 size={18} />
-                  </button>
-                  <button onClick={() => compartirWhatsapp(envio)} className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-full">
-                    <Share2 size={18} />
-                  </button>
-                </td>
-              </tr>
-            ))
-          )}
+              <td className="p-3">{formatearFecha(envio.fecha)}</td>
+              <td className="p-3">{envio.hora}</td>
+
+              <td className="p-3 flex gap-3">
+                <button onClick={() => abrirEditarEnvio(envio)} className="bg-blue-600 text-white p-2 rounded-full"><Pencil size={16} /></button>
+                <button onClick={() => eliminarEnvio(envio.id)} className="bg-red-600 text-white p-2 rounded-full"><Trash2 size={16}/></button>
+                <button onClick={() => compartirWhatsapp(envio)} className="bg-green-600 text-white p-2 rounded-full"><Share2 size={16}/></button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
-      {/* Modal de edición */}
+      {/* PAGINACIÓN */}
+      <div className="flex justify-center items-center gap-2 py-4">
+        <button
+          onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+          disabled={paginaActual === 1}
+          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+        >
+          ◀ Anterior
+        </button>
+
+        {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(num => (
+          <button
+            key={num}
+            onClick={() => setPaginaActual(num)}
+            className={`px-3 py-1 rounded ${
+              paginaActual === num ? "bg-blue-600 text-white" : "bg-gray-200"
+            }`}
+          >
+            {num}
+          </button>
+        ))}
+
+        <button
+          onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+          disabled={paginaActual === totalPaginas}
+          className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
+        >
+          Siguiente ▶
+        </button>
+      </div>
+
       <Modal isOpen={modalOpen} onClose={cerrarModal} title="Editar Envío">
         <RegistroEnvioForm initialData={envioEditando} onSave={guardarEnvio} onCancel={cerrarModal} modo="columnas" />
       </Modal>
