@@ -4,17 +4,18 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo = 'lineal' }) {
-  const mensajeros = ['jose', 'gary', 'jeremy', 'chris', 'uber', 'otro']
+const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
+
   const [form, setForm] = useState({
     cliente: '',
     provincia: '',
     telefono: '',
     ubicacion: '',
     descripcion: '',
-    mensajero: 'jose',
+    notas: '',
+    mensajero: '',
     estado: 'En la mañana',
-    fecha: '',
-    hora: ''
+    fecha: ''
   })
   const [cargando, setCargando] = useState(false)
 
@@ -30,27 +31,19 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       const hoy = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
         .toISOString()
         .split('T')[0]
-      const hora = now.toTimeString().slice(0, 5)
       setForm({
         cliente: '',
         provincia: '',
         telefono: '',
         ubicacion: '',
         descripcion: '',
-        mensajero: 'jose',
+        notas: '',
+        mensajero: '',
         estado: 'En la mañana',
-        fecha: hoy,
-        hora
+        fecha: hoy
       })
     }
   }, [initialData])
-
-  function formatearHoraParaPostgres(horaInput) {
-    if (/^\d{2}:\d{2}(:\d{2})?$/.test(horaInput)) {
-      return horaInput.length === 5 ? horaInput + ':00' : horaInput
-    }
-    return '00:00:00'
-  }
 
   // ✅ Cambia fecha automáticamente según estado seleccionado
   const handleChange = (e) => {
@@ -78,16 +71,13 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
   const handleGuardar = async (modo) => {
     setCargando(true)
 
-    if (!form.cliente || !form.fecha || !form.hora) {
-      toast.error('Por favor completa al menos el cliente, la fecha y la hora.')
+    if (!form.cliente || !form.fecha) {
+      toast.error('Por favor completa al menos el cliente y la fecha.')
       setCargando(false)
       return
     }
 
-    const nuevoEnvio = {
-      ...form,
-      hora: formatearHoraParaPostgres(form.hora)
-    }
+    const nuevoEnvio = { ...form }
 
     try {
       if (modo === 'actualizar' && initialData) {
@@ -95,7 +85,7 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
           .from('envios')
           .update(nuevoEnvio)
           .eq('id', initialData.id)
-        if (error) toast.error(`❌ Error al actualizar: ${error.message}`)
+        if (error) toast.error('❌ Error al actualizar: ${error.message}')
         else {
           toast.success('✏️ Envío actualizado correctamente')
           onSave?.()
@@ -105,7 +95,7 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         if ('id' in nuevoEnvio) delete nuevoEnvio.id
 
         const { error } = await supabase.from('envios').insert([nuevoEnvio])
-        if (error) toast.error(`❌ Error al guardar: ${error.message}`)
+        if (error) toast.error('❌ Error al guardar: ${error.message}')
         else {
           toast.success('✅ Envío agregado correctamente')
           onSave?.()
@@ -113,7 +103,7 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         }
       }
     } catch (err) {
-      toast.error(`❌ Error inesperado: ${err.message}`)
+      toast.error('❌ Error inesperado: ${err.message}')
     } finally {
       setCargando(false)
     }
@@ -132,22 +122,30 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       <input type="text" name="ubicacion" value={form.ubicacion} onChange={handleChange} placeholder="Ubicación / Google Maps" className="min-w-[180px] px-3 py-2 border rounded" />
       <input type="text" name="descripcion" value={form.descripcion} onChange={handleChange} placeholder="Descripción" className="min-w-[180px] px-3 py-2 border rounded" />
 
+      {/* Nuevo campo de notas */}
+      <input
+        type="text"
+        name="notas"
+        value={form.notas}
+        onChange={handleChange}
+        placeholder="Notas"
+        className="min-w-[180px] px-3 py-2 border rounded"
+      />
+
       {/* Mensajero */}
       <div className="flex flex-col min-w-[130px]">
         <select
-          name="mensajero"
-          value={mensajeros.includes(form.mensajero) ? form.mensajero : 'otro'}
-          onChange={e => {
-            const valor = e.target.value
-            setForm(prev => ({ ...prev, mensajero: valor === 'otro' ? '' : valor }))
-          }}
-          className="px-3 py-2 border rounded"
-        >
-          {mensajeros.map(m => (
-            <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
-          ))}
-        </select>
-    
+  name="mensajero"
+  value={form.mensajero}
+  onChange={(e) => setForm(prev => ({ ...prev, mensajero: e.target.value }))}
+  className="px-3 py-2 border rounded"
+> 
+  <option value="">Mensajero</option>
+  {mensajeros.map(m => (
+    <option key={m} value={m}>{m}</option>
+  ))}
+</select>
+
       </div>
 
       <select name="estado" value={form.estado} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded">
@@ -157,7 +155,6 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       </select>
 
       <input type="date" name="fecha" value={form.fecha} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded" required />
-      <input type="time" name="hora" value={form.hora} onChange={handleChange} className="min-w-[110px] px-3 py-2 border rounded" required />
 
       <div className="flex items-center gap-4">
         {initialData && (
