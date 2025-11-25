@@ -96,17 +96,19 @@ export default function TablaEnvios() {
     .select('*')
     .order('id', { ascending: false });
 
-  if (!error) {
-    setEnvios(data);
+   if (!error) {
+  setEnvios(data);
 
-    // 🔥 Reconstruir animaciones desde Base de Datos
-   const mapeo = {};
-      data.forEach(e => {
-        if (e.actualizado) mapeo[e.id] = true;
-      });
+  setActualizados(prev => {
+    const nuevo = { ...prev };
+    data.forEach(e => {
+      if (e.actualizado) nuevo[e.id] = true;  // activar si en BD está activo
+      // ❗ si prev[e.id] está en true, NO lo apagamos aquí
+    });
+    return nuevo;
+  });
+}
 
-      setActualizados(mapeo);
-    }
   
 
   if (showLoader)
