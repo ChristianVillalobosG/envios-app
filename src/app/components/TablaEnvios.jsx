@@ -63,19 +63,59 @@ export default function TablaEnvios() {
   const [fechaFiltro, setFechaFiltro] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
   const [mensajeroFiltro, setMensajeroFiltro] = useState('')
+  const [actualizados, setActualizados] = useState({})
+  const [envioEditando, setEnvioEditando] = useState(null)
+  const [originalDelModal, setOriginalDelModal] = useState(null) // copia original para comparar
+  const [editandoDesdeModal, setEditandoDesdeModal] = useState(false)  
+   const [animacionesListas, setAnimacionesListas] = useState(false); 
   const [loading, setLoading] = useState(true)
   const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [paginaActual, setPaginaActual] = useState(1)
   const ITEMS_POR_PAGINA = 45
-  const [modalOpen, setModalOpen] = useState(false)
-  const [envioEditando, setEnvioEditando] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)  
+
+  const abrirCrearEnvio = () => {
+  setEnvioEditando(null);
+  setOriginalDelModal(null);
+  setEditandoDesdeModal(false);
+  setModalOpen(true);
+};
+
+
+    useEffect(() => {
+    // Evita que las animaciones se activen en el primer render
+    const timer = setTimeout(() => setAnimacionesListas(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   const fetchEnvios = async (showLoader = false) => {
-    if (showLoader) setLoading(true)
-    const { data, error } = await supabase.from('envios').select('*')
-    if (!error) setEnvios(data)
-    if (showLoader) setTimeout(() => { setLoading(false); setIsFirstLoad(false) }, 600)
-  }
+  if (showLoader) setLoading(true);
+
+  const { data, error } = await supabase
+    .from('envios')
+    .select('*')
+    .order('id', { ascending: false });
+
+  if (!error) {
+    setEnvios(data);
+
+    // 🔥 Reconstruir animaciones desde Base de Datos
+   const mapeo = {};
+      data.forEach(e => {
+        if (e.actualizado) mapeo[e.id] = true;
+      });
+
+      setActualizados(mapeo);
+    }
+  
+
+  if (showLoader)
+    setTimeout(() => { 
+      setLoading(false); 
+      setIsFirstLoad(false); 
+    }, 600);
+};
+
 
   useEffect(() => {
     fetchEnvios(true)
@@ -99,19 +139,17 @@ export default function TablaEnvios() {
 
     if (fechaFiltro) datos = datos.filter(e => e.fecha === fechaFiltro)
     if (mensajeroFiltro) datos = datos.filter(e => e.mensajero === mensajeroFiltro)
-     if (estadoFiltro) {
-  const normalizar = (txt) =>
-    txt.toLowerCase()
-       .normalize("NFD")
-       .replace(/[\u0300-\u036f]/g, "") // elimina tildes
-       .trim()
+    if (estadoFiltro) {
+      const normalizar = (txt) =>
+        txt.toLowerCase()
+           .normalize("NFD")
+           .replace(/[\u0300-\u036f]/g, "") // elimina tildes
+           .trim()
 
-  const estadoNorm = normalizar(estadoFiltro)
+      const estadoNorm = normalizar(estadoFiltro)
 
-  datos = datos.filter(e => normalizar(e.estado || "") === estadoNorm)
-}
-
-
+      datos = datos.filter(e => normalizar(e.estado || "") === estadoNorm)
+    }
 
     datos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
     return datos
@@ -125,14 +163,19 @@ export default function TablaEnvios() {
 
   useEffect(() => { setPaginaActual(1) }, [busqueda, fechaFiltro, estadoFiltro, mensajeroFiltro])
 
-  /* ---------- Cambiar Estado ---------- */
+  /* ---------- Cambiar Estado (desde tabla) - NO debe activar la animación del modal ---------- */
   const cambiarEstado = async (id, nuevoEstado) => {
+    // indicar que este cambio NO viene del modal
+    setEditandoDesdeModal(false)
+
     const hoy = dayjs().format("YYYY-MM-DD")
     const manana = dayjs().add(1, "day").format("YYYY-MM-DD")
-
     const nuevaFecha = nuevoEstado === "Mañana" ? manana : hoy
 
     await supabase.from('envios').update({ estado: nuevoEstado, fecha: nuevaFecha }).eq('id', id)
+
+    // No marcar en 'actualizados' (solo las ediciones desde el modal deberían marcar)
+    // setActualizados(prev => ({ ...prev, [id]: true }));
 
     setEnvios(prev =>
       prev.map(e =>
@@ -141,10 +184,15 @@ export default function TablaEnvios() {
     )
   }
 
-  /* ---------- Cambiar Mensajero ---------- */
+  /* ---------- Cambiar Mensajero (desde tabla) - NO debe activar la animación del modal ---------- */
   const cambiarMensajero = async (id, nuevoMensajero) => {
+    // indicar que este cambio NO viene del modal
+    setEditandoDesdeModal(false)
+
     await supabase.from('envios').update({ mensajero: nuevoMensajero }).eq('id', id)
     setEnvios(prev => prev.map(e => e.id === id ? { ...e, mensajero: nuevoMensajero } : e))
+    // No marcar en 'actualizados'
+    // setActualizados(prev => ({ ...prev, [id]: true }));
   }
 
   /* ---------- Eliminar ---------- */
@@ -215,65 +263,156 @@ Notas: *${e.notas || '-'}*\n\n`
 
   /* ---------- Fecha ---------- */
   const formatearFecha = (fecha) => {
-  const d = dayjs(fecha)
-  const hoy = dayjs()
-  const manana = dayjs().add(1, "day")
-  const ayer = dayjs().subtract(1, "day")
-
-  if (d.isSame(hoy, "day")) return "Hoy"
-  if (d.isSame(manana, "day")) return "Mañana"
-  if (d.isSame(ayer, "day")) return "Ayer"
-
-  return d.format("DD/MM/YYYY")
-}
+    const d = dayjs(fecha)
+    const hoy = dayjs()
+    const manana = dayjs().add(1, "day")
+    const ayer = dayjs().subtract(1, "day")
 
 
-  /* ---------- Modal ---------- */
-  const abrirEditarEnvio = (envio) => { setEnvioEditando(envio); setModalOpen(true) }
-  const cerrarModal = () => { setModalOpen(false); setEnvioEditando(null) }
-  const guardarEnvio = () => { fetchEnvios(); cerrarModal() }
+    if (d.isSame(hoy, "day")) return "Hoy"
+    if (d.isSame(manana, "day")) return "Mañana"
+    if (d.isSame(ayer, "day")) return "Ayer"
+
+    return d.format("DD/MM/YYYY")
+  } 
+
+
+
+
+
+ /* ---------- Modal ---------- */
+const abrirEditarEnvio = (envio) => {
+  // Guardamos el registro original ANTES de modificarlo
+  setOriginalDelModal(envio ? { ...envio } : null);
+  setEditandoDesdeModal(!!envio); // solo TRUE si viene un envio existente
+  setEnvioEditando(envio);
+  setModalOpen(true);
+};
+
+const cerrarModal = () => {
+  setModalOpen(false);
+  setEnvioEditando(null);
+  setOriginalDelModal(null);
+  setEditandoDesdeModal(false);
+};
+
+const guardarEnvio = async () => {
+  // 🚫 Si es creación — NO animación, solo limpiar y salir
+  if (!editandoDesdeModal || !envioEditando?.id || !originalDelModal) {
+    setEditandoDesdeModal(false);
+    setOriginalDelModal(null);
+    await fetchEnvios(); // refresca sin activar animación
+    return;
+  }
+
+  // Si llega aquí sí es edición REAL → revisamos cambios
+  const id = envioEditando.id;
+
+  const { data: actualizadoEnDB, error } = await supabase
+    .from("envios")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error("Error fetching updated record:", error);
+    await fetchEnvios();
+    setEditandoDesdeModal(false);
+    setOriginalDelModal(null);
+    return;
+  }
+
+  const camposIgnorados = ["estado", "mensajero"];
+  let huboCambiosEspeciales = false;
+
+  const keys = new Set([
+    ...Object.keys(originalDelModal),
+    ...Object.keys(actualizadoEnDB)
+  ]);
+
+  for (const k of keys) {
+    if (camposIgnorados.includes(k)) continue;
+
+    const antes = originalDelModal[k] ?? "";
+    const ahora = actualizadoEnDB[k] ?? "";
+
+    if (String(antes) !== String(ahora)) {
+      huboCambiosEspeciales = true;
+      break;
+    }
+  }
+
+  if (huboCambiosEspeciales) {
+    await supabase
+      .from("envios")
+      .update({ actualizado: true })
+      .eq("id", id);
+
+    setActualizados(prev => ({
+      ...prev,
+      [id]: true
+    }));
+
+    setTimeout(async () => {
+      await supabase
+        .from("envios")
+        .update({ actualizado: false })
+        .eq("id", id);
+
+      setActualizados(prev => {
+        const nuevo = { ...prev };
+        delete nuevo[id];
+        return nuevo;
+      });
+    }, 600000);
+  }
+
+  await fetchEnvios();
+
+  setEditandoDesdeModal(false);
+  setOriginalDelModal(null);
+};
 
   /* ---------- Render ---------- */
 
   if (loading && isFirstLoad) return <TableBarLoader />
+  
 
-const exportarExcel = (soloFiltrados) => {
-  const datos = soloFiltrados ? enviosFiltradosOrdenados : envios;
+  const exportarExcel = (soloFiltrados) => {
+    const datos = soloFiltrados ? enviosFiltradosOrdenados : envios;
 
-  if (!datos || datos.length === 0) {
-    toast.error("No hay envíos para exportar");
-    return;
-  }
+    if (!datos || datos.length === 0) {
+      toast.error("No hay envíos para exportar");
+      return;
+    }
 
-  // Eliminamos campos innecesarios o internos
-  const datosLimpios = datos.map(e => ({
-    Cliente: e.cliente || "",
-    Provincia: e.provincia || "",
-    Teléfono: e.telefono || "",
-    Ubicación: e.ubicacion || "",
-    Descripción: e.descripcion || "",
-    Notas: e.notas || "",
-    Mensajero: e.mensajero || "",
-    Estado: e.estado || "",
-    Fecha: e.fecha || "",
-    Completado: e.completado ? "Sí" : "No"
-  }));
+    // Eliminamos campos innecesarios o internos
+    const datosLimpios = datos.map(e => ({
+      Cliente: e.cliente || "",
+      Provincia: e.provincia || "",
+      Teléfono: e.telefono || "",
+      Ubicación: e.ubicacion || "",
+      Descripción: e.descripcion || "",
+      Notas: e.notas || "",
+      Mensajero: e.mensajero || "",
+      Estado: e.estado || "",
+      Fecha: e.fecha || "",
+      Completado: e.completado ? "Sí" : "No"
+    }));
 
-  const hoja = XLSX.utils.json_to_sheet(datosLimpios);
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, "Envios");
+    const hoja = XLSX.utils.json_to_sheet(datosLimpios);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Envios");
 
-  const nombre = soloFiltrados
-    ? "envios_filtrados.xlsx"
-    : "envios_todos.xlsx";
+    const nombre = soloFiltrados
+      ? "envios_filtrados.xlsx"
+      : "envios_todos.xlsx";
 
-  const archivoExcel = XLSX.write(libro, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([archivoExcel]), nombre);
+    const archivoExcel = XLSX.write(libro, { bookType: "xlsx", type: "array" });
+    saveAs(new Blob([archivoExcel]), nombre);
 
-  toast.success("📄 Excel generado correctamente");
-};
-
-
+    toast.success("📄 Excel generado correctamente");
+  };
 
   return (
     <div className="mt-8 overflow-x-auto rounded-xl shadow-lg bg-white text-zinc-900 font-sans">
@@ -338,7 +477,15 @@ const exportarExcel = (soloFiltrados) => {
           {enviosPagina.length === 0 ? (
             <tr><td colSpan={10} className="text-center p-6 text-gray-500">No hay registros</td></tr>
           ) : enviosPagina.map(envio => (
-            <tr key={envio.id} className="border-b hover:bg-gray-100 align-top">
+<tr
+  key={envio.id}
+  className={`border-b align-top transition-all ${
+    actualizados[envio.id]
+      ? `bg-yellow-300  ${animacionesListas ? "animate-pulse" : ""}` : "bg-white hover:bg-gray-100"
+  }`}
+>
+
+
 
               <td className="p-3 break-words max-w-[180px]">{envio.cliente}</td>
               <td className="p-3 break-words max-w-[150px]">{envio.provincia}</td>
@@ -374,35 +521,67 @@ const exportarExcel = (soloFiltrados) => {
                 </select>
               </td>
 
-              {/* ESTADO */}
-              <td className="p-3 flex items-center gap-3">
-                <select
-                  value={envio.estado ?? ''}
-                  onChange={(e) => cambiarEstado(envio.id, e.target.value)}
-                  className={`px-2 py-1 rounded text-xs font-semibold
-                    ${
-                      envio.estado === 'En la mañana' ? 'bg-green-200 text-green-800'
-                      : envio.estado === 'En la tarde' ? 'bg-yellow-200 text-yellow-800'
-                      : 'bg-blue-200 text-blue-800'
-                    }
-                  `}
-                >
-                  <option>En la mañana</option>
-                  <option>En la tarde</option>
-                  <option>Mañana</option>
-                </select> 
+              {/* ESTADO + COMPLETADO + ACTUALIZADO */}
+              <td className="p-3 align-top">
+                <div className="flex flex-col gap-1">
 
-                 {/* COMPLETAR */}
-                <button
-                  onClick={() => toggleCompletado(envio.id, envio.completado)}
-                  className={`p-1.5 rounded-full border ${
-                    envio.completado
-                      ? 'bg-green-600 text-white border-green-600'
-                      : 'border-gray-400 text-gray-500'
-                  }`}
-                >
-                  <Check size={16}/>
-                </button>
+                  {/* SELECT + BOTÓN COMPLETADO */}
+                  <div className="flex items-center justify-between gap-2">
+
+                    {/* SELECT DE ESTADO */}
+                    <select
+                      value={envio.estado ?? ''}
+                      onChange={(e) => cambiarEstado(envio.id, e.target.value)}
+                      className={`px-2 py-1 rounded text-xs font-semibold w-fit
+                        ${
+                          envio.estado === 'En la mañana' ? 'bg-green-200 text-green-800'
+                          : envio.estado === 'En la tarde' ? 'bg-yellow-200 text-yellow-800'
+                          : 'bg-blue-200 text-blue-800'
+                        }
+                      `}
+                    >
+                      <option>En la mañana</option>
+                      <option>En la tarde</option>
+                      <option>Mañana</option>
+                    </select>
+
+                    {/* BOTÓN COMPLETADO */}
+                    <button
+                      onClick={() => toggleCompletado(envio.id, envio.completado)}
+                      className={`p-1.5 rounded-full border w-fit
+                        ${
+                          envio.completado
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'border-gray-400 text-gray-500'
+                        }
+                      `}
+                    >
+                      <Check size={16}/>
+                    </button>
+
+                  </div>
+
+                  {/* BADGE ANIMADO “ACTUALIZADO” */}
+                  {actualizados[envio.id] && (
+                    <span className="text-yellow-600 font-bold text-xs tracking-wide animate-typing overflow-hidden whitespace-nowrap">
+                  
+                    </span>
+                  )}
+
+                </div>
+
+                {/* ANIMACIÓN TYPING */}
+                <style jsx>{`
+                  @keyframes typing {
+                    from { width: 0 }
+                    to { width: 100% }
+                  }
+                  .animate-typing {
+                    display: inline-block;
+                    width: 0;
+                    animation: typing 1.2s steps(12, end) forwards;
+                  }
+                `}</style>
               </td>
 
               {/* FECHA */}
@@ -431,9 +610,6 @@ const exportarExcel = (soloFiltrados) => {
                   className="bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-full">
                   <Copy size={16} />
                 </button>
-
-               
-
               </td>
             </tr>
           ))}
@@ -463,10 +639,16 @@ const exportarExcel = (soloFiltrados) => {
       </div>
 
       {/* MODAL */}
-      <Modal isOpen={modalOpen} onClose={cerrarModal} title="Editar Envío">
-        <RegistroEnvioForm initialData={envioEditando} onSave={guardarEnvio} onCancel={cerrarModal} modo="columnas" />
-      </Modal>
-
+     <Modal isOpen={modalOpen} onClose={cerrarModal} title={
+  envioEditando ? "Editar Envío" : "Crear Envío"
+}>
+  <RegistroEnvioForm
+    initialData={envioEditando}
+    onSave={guardarEnvio}
+    onCancel={cerrarModal}
+    modo="columnas"
+  />
+</Modal>
     </div>
   )
 }
