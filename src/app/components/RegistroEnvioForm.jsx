@@ -4,7 +4,7 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo = 'lineal' }) {
-const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
+  const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
 
   const [form, setForm] = useState({
     cliente: '',
@@ -17,20 +17,31 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
     estado: 'En la mañana',
     fecha: ''
   })
+
   const [cargando, setCargando] = useState(false)
 
+  // 🔥 FIX: Normaliza initialData para evitar valores null en los inputs
   useEffect(() => {
     if (initialData) {
-      if (!mensajeros.includes(initialData.mensajero)) {
-        setForm(prev => ({ ...prev, ...initialData, mensajero: initialData.mensajero }))
-      } else {
-        setForm(initialData)
+      const normalizado = {
+        cliente: initialData.cliente ?? '',
+        provincia: initialData.provincia ?? '',
+        telefono: initialData.telefono ?? '',
+        ubicacion: initialData.ubicacion ?? '',
+        descripcion: initialData.descripcion ?? '',
+        notas: initialData.notas ?? '',
+        mensajero: initialData.mensajero ?? '',
+        estado: initialData.estado ?? 'En la mañana',
+        fecha: initialData.fecha ?? ''
       }
+
+      setForm(normalizado)
     } else {
       const now = new Date()
       const hoy = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
         .toISOString()
         .split('T')[0]
+
       setForm({
         cliente: '',
         provincia: '',
@@ -45,7 +56,7 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
     }
   }, [initialData])
 
-  // ✅ Cambia fecha automáticamente según estado seleccionado
+  // Cambia fecha automáticamente según estado
   const handleChange = (e) => {
     const { name, value } = e.target
 
@@ -67,7 +78,7 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
     }
   }
 
-  // ✅ Guarda el envío en Supabase
+  // Guarda el envío en Supabase
   const handleGuardar = async (modo) => {
     setCargando(true)
 
@@ -85,7 +96,8 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
           .from('envios')
           .update(nuevoEnvio)
           .eq('id', initialData.id)
-        if (error) toast.error('❌ Error al actualizar: ${error.message}')
+
+        if (error) toast.error(`❌ Error al actualizar: ${error.message}`)
         else {
           toast.success('✏️ Envío actualizado correctamente')
           onSave?.()
@@ -95,7 +107,8 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
         if ('id' in nuevoEnvio) delete nuevoEnvio.id
 
         const { error } = await supabase.from('envios').insert([nuevoEnvio])
-        if (error) toast.error('❌ Error al guardar: ${error.message}')
+
+        if (error) toast.error(`❌ Error al guardar: ${error.message}`)
         else {
           toast.success('✅ Envío agregado correctamente')
           onSave?.()
@@ -103,7 +116,8 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
         }
       }
     } catch (err) {
-      toast.error('❌ Error inesperado: ${err.message}')
+      // si err no tiene message, mostramos el objeto
+      toast.error(`❌ Error inesperado: ${err?.message ?? String(err)}`)
     } finally {
       setCargando(false)
     }
@@ -116,11 +130,52 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className={containerClass}>
-      <input type="text" name="cliente" value={form.cliente} onChange={handleChange} placeholder="Cliente" className="min-w-[150px] px-3 py-2 border rounded" required />
-      <input type="text" name="provincia" value={form.provincia} onChange={handleChange} placeholder="Provincia" className="min-w-[120px] px-3 py-2 border rounded" />
-      <input type="tel" name="telefono" value={form.telefono} onChange={handleChange} placeholder="Teléfono" className="min-w-[130px] px-3 py-2 border rounded" />
-      <input type="text" name="ubicacion" value={form.ubicacion} onChange={handleChange} placeholder="Ubicación / Google Maps" className="min-w-[180px] px-3 py-2 border rounded" />
-      <input type="text" name="descripcion" value={form.descripcion} onChange={handleChange} placeholder="Descripción" className="min-w-[180px] px-3 py-2 border rounded" />
+      
+      <input
+        type="text"
+        name="cliente"
+        value={form.cliente}
+        onChange={handleChange}
+        placeholder="Cliente"
+        className="min-w-[150px] px-3 py-2 border rounded"
+        required
+      />
+
+      <input
+        type="text"
+        name="provincia"
+        value={form.provincia}
+        onChange={handleChange}
+        placeholder="Provincia"
+        className="min-w-[120px] px-3 py-2 border rounded"
+      />
+
+      <input
+        type="tel"
+        name="telefono"
+        value={form.telefono}
+        onChange={handleChange}
+        placeholder="Teléfono"
+        className="min-w-[130px] px-3 py-2 border rounded"
+      />
+
+      <input
+        type="text"
+        name="ubicacion"
+        value={form.ubicacion}
+        onChange={handleChange}
+        placeholder="Ubicación / Google Maps"
+        className="min-w-[180px] px-3 py-2 border rounded"
+      />
+
+      <input
+        type="text"
+        name="descripcion"
+        value={form.descripcion}
+        onChange={handleChange}
+        placeholder="Descripción"
+        className="min-w-[180px] px-3 py-2 border rounded"
+      />
 
       {/* Nuevo campo de notas */}
       <input
@@ -135,38 +190,65 @@ const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
       {/* Mensajero */}
       <div className="flex flex-col min-w-[130px]">
         <select
-  name="mensajero"
-  value={form.mensajero}
-  onChange={(e) => setForm(prev => ({ ...prev, mensajero: e.target.value }))}
-  className="px-3 py-2 border rounded"
-> 
-  <option value="">Mensajero</option>
-  {mensajeros.map(m => (
-    <option key={m} value={m}>{m}</option>
-  ))}
-</select>
-
+          name="mensajero"
+          value={form.mensajero}
+          onChange={(e) => setForm(prev => ({ ...prev, mensajero: e.target.value }))}
+          className="px-3 py-2 border rounded"
+        >
+          <option value="">Mensajero</option>
+          {mensajeros.map(m => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
       </div>
 
-      <select name="estado" value={form.estado} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded">
+      <select
+        name="estado"
+        value={form.estado}
+        onChange={handleChange}
+        className="min-w-[130px] px-3 py-2 border rounded"
+      >
         <option>En la mañana</option>
         <option>En la tarde</option>
         <option>Mañana</option>
       </select>
 
-      <input type="date" name="fecha" value={form.fecha} onChange={handleChange} className="min-w-[130px] px-3 py-2 border rounded" required />
+      <input
+        type="date"
+        name="fecha"
+        value={form.fecha}
+        onChange={handleChange}
+        className="min-w-[130px] px-3 py-2 border rounded"
+        required
+      />
 
       <div className="flex items-center gap-4">
         {initialData && (
-          <button type="button" disabled={cargando} onClick={() => handleGuardar('actualizar')} className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50">
+          <button
+            type="button"
+            disabled={cargando}
+            onClick={() => handleGuardar('actualizar')}
+            className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+          >
             Actualizar
           </button>
         )}
-        <button type="button" disabled={cargando} onClick={() => handleGuardar('crear')} className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50">
+
+        <button
+          type="button"
+          disabled={cargando}
+          onClick={() => handleGuardar('crear')}
+          className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+        >
           Crear
         </button>
+
         {onCancel && (
-          <button type="button" onClick={onCancel} className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded"
+          >
             Cancelar
           </button>
         )}
