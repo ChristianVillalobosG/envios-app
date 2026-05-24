@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { supabase } from '@/app/lib/supabase'
 import RegistroEnvioForm from './components/RegistroEnvioForm'
@@ -10,22 +11,50 @@ import Bienvenida from './components/Bienvenida'
 export default function Page() {
   const [user, setUser] = useState(null)
   const [mostrarRegistro, setMostrarRegistro] = useState(false)
-  const [refresh, setRefresh] = useState(false) // Estado para refrescar tabla
+  const [refresh, setRefresh] = useState(false)
 
+  /* ---------- Verificar sesión ---------- */
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
-    })
+    const verificarSesion = async () => {
+      try {
+        const {
+          data: { session },
+          error
+        } = await supabase.auth.getSession()
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+        // Si no hay sesión válida
+        if (error || !session) {
+          await supabase.auth.signOut()
+          setUser(null)
+          return
+        }
+
+        setUser(session.user)
+
+      } catch (err) {
+        console.error('Error verificando sesión:', err)
+
+        await supabase.auth.signOut()
+
+        setUser(null)
+      }
+    }
+
+    verificarSesion()
+
+    // Escuchar cambios de autenticación
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
 
     return () => {
-      listener.subscription.unsubscribe()
+      subscription.unsubscribe()
     }
   }, [])
 
+  /* ---------- LOGIN / REGISTRO ---------- */
   if (!user) {
     return (
       <main className="p-6">
@@ -35,18 +64,25 @@ export default function Page() {
             onMostrarLogin={() => setMostrarRegistro(false)}
           />
         ) : (
-          <LoginForm onMostrarRegistro={() => setMostrarRegistro(true)} />
+          <LoginForm
+            onMostrarRegistro={() => setMostrarRegistro(true)}
+          />
         )}
       </main>
     )
   }
 
+  /* ---------- APP ---------- */
   return (
     <main className="p-6">
+      
+      {/* HEADER */}
       <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Registro de Envíos Pritonic</h1>
+        <h1 className="text-2xl font-bold">
+          Registro de Envíos Pritonic
+        </h1>
+
         <div>
-          {/* Ya no necesitas botón para abrir modal */}
           <button
             onClick={async () => {
               await supabase.auth.signOut()
@@ -58,17 +94,18 @@ export default function Page() {
         </div>
       </div>
 
+      {/* BIENVENIDA */}
       <Bienvenida />
 
-      {/* Formulario fijo debajo del título */}
-       <RegistroEnvioForm onSave={() => setRefresh(r => !r)} modo="lineal" /> 
+      {/* FORMULARIO */}
+      <RegistroEnvioForm
+        onSave={() => setRefresh((r) => !r)}
+        modo="lineal"
+      />
 
-      {/* Tabla de envíos que se refresca cuando cambia 'refresh' */}
+      {/* TABLA */}
       <TablaEnvios refresh={refresh} />
+
     </main>
   )
 }
-
-
-
-

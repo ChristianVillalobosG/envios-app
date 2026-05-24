@@ -1,12 +1,33 @@
 'use client'
+
 import { useEffect, useState } from 'react'
 import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
-export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo = 'lineal' }) {
-  const mensajeros = ['Jose', 'Gary', 'Jeremy', 'Chris', 'Uber', 'Andres', 'Otro']
+export default function RegistroEnvioForm({
+  onSave,
+  onCancel,
+  initialData,
+  modo = 'lineal'
+}) {
+  const mensajeros = [
+    'Jose',
+    'Gary',
+    'Jeremy',
+    'Chris',
+    'Uber',
+    'Andres',
+    'Otro'
+  ]
 
-  const [form, setForm] = useState({
+  const obtenerFechaHoy = () => {
+    const now = new Date()
+    const hoy = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+
+    return hoy.toISOString().split('T')[0]
+  }
+
+  const formInicial = {
     cliente: '',
     provincia: '',
     telefono: '',
@@ -15,15 +36,16 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
     notas: '',
     mensajero: '',
     estado: 'En la mañana',
-    fecha: ''
-  })
+    fecha: obtenerFechaHoy()
+  }
 
+  const [form, setForm] = useState(formInicial)
   const [cargando, setCargando] = useState(false)
 
-  // 🔥 FIX: Normaliza initialData para evitar valores null en los inputs
+  /* ---------- CARGAR DATOS ---------- */
   useEffect(() => {
     if (initialData) {
-      const normalizado = {
+      setForm({
         cliente: initialData.cliente ?? '',
         provincia: initialData.provincia ?? '',
         telefono: initialData.telefono ?? '',
@@ -32,92 +54,184 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         notas: initialData.notas ?? '',
         mensajero: initialData.mensajero ?? '',
         estado: initialData.estado ?? 'En la mañana',
-        fecha: initialData.fecha ?? ''
-      }
-
-      setForm(normalizado)
-    } else {
-      const now = new Date()
-      const hoy = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-        .toISOString()
-        .split('T')[0]
-
-      setForm({
-        cliente: '',
-        provincia: '',
-        telefono: '',
-        ubicacion: '',
-        descripcion: '',
-        notas: '',
-        mensajero: '',
-        estado: 'En la mañana',
-        fecha: hoy
+        fecha: initialData.fecha ?? obtenerFechaHoy()
       })
+    } else {
+      setForm({ ...formInicial })
     }
   }, [initialData])
 
-  // Cambia fecha automáticamente según estado
-  const handleChange = (e) => {
-    const { name, value } = e.target
+  /* ---------- HANDLE CHANGE ---------- */
+const handleChange = (e) => {
+  const { name, value } = e.target
 
-    if (name === 'estado') {
-      const hoy = new Date()
-      const hoyLocal = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000)
-      const fechaHoy = hoyLocal.toISOString().split('T')[0]
+  const hoy = new Date()
 
-      if (value === 'Mañana') {
-        const manana = new Date(hoyLocal)
-        manana.setDate(manana.getDate() + 1)
-        const fechaManana = manana.toISOString().split('T')[0]
-        setForm(prev => ({ ...prev, estado: value, fecha: fechaManana }))
-      } else {
-        setForm(prev => ({ ...prev, estado: value, fecha: fechaHoy }))
-      }
+  const hoyLocal = new Date(
+    hoy.getTime() - hoy.getTimezoneOffset() * 60000
+  )
+
+  const hoyStr = hoyLocal.toISOString().split('T')[0]
+
+  const manana = new Date(hoyLocal)
+
+  manana.setDate(manana.getDate() + 1)
+
+  const mananaStr = manana.toISOString().split('T')[0]
+
+  /* ---------- CAMBIO DE ESTADO ---------- */
+  if (name === 'estado') {
+    let nuevaFecha
+
+    if (value === 'Mañana') {
+      nuevaFecha = mananaStr
     } else {
-      setForm(prev => ({ ...prev, [name]: value }))
+      nuevaFecha = hoyStr
     }
+
+    setForm((prev) => ({
+      ...prev,
+      estado: value,
+      fecha: nuevaFecha
+    }))
+
+    return
   }
 
-  // Guarda el envío en Supabase
-  const handleGuardar = async (modo) => {
-    setCargando(true)
+  /* ---------- CAMBIO DE FECHA ---------- */
+  if (name === 'fecha') {
+    let nuevoEstado = form.estado
 
-    if (!form.cliente || !form.fecha) {
-      toast.error('Por favor completa al menos el cliente y la fecha.')
-      setCargando(false)
-      return
+    // Si fecha es mañana → estado Mañana
+    if (value === mananaStr) {
+      nuevoEstado = 'Mañana'
     }
 
-    const nuevoEnvio = { ...form }
+    // Si fecha es hoy o anterior → En la mañana
+    else if (value <= hoyStr) {
+      nuevoEstado = 'En la mañana'
+    }
 
+    // Si fecha es futura → En la mañana
+    else {
+      nuevoEstado = 'En la mañana'
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      fecha: value,
+      estado: nuevoEstado
+    }))
+
+    return
+  }
+
+  /* ---------- OTROS CAMPOS ---------- */
+  setForm((prev) => ({
+    ...prev,
+    [name]: value
+  }))
+}
+  /* ---------- GUARDAR ---------- */
+  const handleGuardar = async (tipo) => {
     try {
-      if (modo === 'actualizar' && initialData) {
-        const { error } = await supabase
-          .from('envios')
-          .update(nuevoEnvio)
-          .eq('id', initialData.id)
+      setCargando(true)
 
-        if (error) toast.error(`❌ Error al actualizar: ${error.message}`)
-        else {
-          toast.success('✏️ Envío actualizado correctamente')
-          onSave?.()
-          onCancel?.()
-        }
-      } else {
-        if ('id' in nuevoEnvio) delete nuevoEnvio.id
-
-        const { error } = await supabase.from('envios').insert([nuevoEnvio])
-
-        if (error) toast.error(`❌ Error al guardar: ${error.message}`)
-        else {
-          toast.success('✅ Envío agregado correctamente')
-          onSave?.()
-          onCancel?.()
-        }
+      if (!form.cliente || !form.fecha) {
+        toast.error('Completa cliente y fecha')
+        return
       }
+
+      /* ---------- SESIÓN ---------- */
+      const {
+        data: { session },
+        error: sessionError
+      } = await supabase.auth.getSession()
+
+      if (sessionError || !session?.user) {
+        toast.error('Sesión inválida')
+        return
+      }
+
+      const user = session.user
+
+    const envioData = {
+  ...form,
+  user_id: user.id
+}
+
+console.log('USER ID:', user.id)
+console.log('SESSION:', session)
+console.log('ENVIO DATA:', envioData)
+
+      /* ---------- ACTUALIZAR ---------- */
+     /* ---------- ACTUALIZAR ---------- */
+if (tipo === 'actualizar' && initialData?.id) {
+
+  const descripcionCambio =
+    (initialData.descripcion || '').trim() !==
+    (form.descripcion || '').trim()
+
+  const { error } = await supabase
+    .from('envios')
+    .update({
+      ...envioData,
+
+      descripcion_editada:
+        descripcionCambio
+          ? true
+          : initialData.descripcion_editada,
+
+      descripcion_editada_at:
+        descripcionCambio
+          ? new Date().toISOString()
+          : initialData.descripcion_editada_at,
+
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', initialData.id)
+    .select()
+
+  if (error) {
+    toast.error(`❌ ${error.message}`)
+    return
+  }
+
+  toast.success('✏️ Envío actualizado')
+
+  onSave?.()
+  onCancel?.()
+
+  return
+}
+      /* ---------- CREAR ---------- */
+      const { error } = await supabase
+        .from('envios')
+        .insert([
+          {
+            ...envioData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ])
+        .select()
+
+      if (error) {
+        toast.error(`❌ ${error.message}`)
+        return
+      }
+
+      toast.success('✅ Envío creado')
+
+      setForm({ ...formInicial })
+
+      onSave?.()
+      onCancel?.()
+
     } catch (err) {
-      // si err no tiene message, mostramos el objeto
-      toast.error(`❌ Error inesperado: ${err?.message ?? String(err)}`)
+      console.error(err)
+
+      toast.error('Error inesperado')
     } finally {
       setCargando(false)
     }
@@ -129,8 +243,10 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
       : 'grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white rounded-xl shadow-md'
 
   return (
-    <form onSubmit={(e) => e.preventDefault()} className={containerClass}>
-      
+    <form
+      onSubmit={(e) => e.preventDefault()}
+      className={containerClass}
+    >
       <input
         type="text"
         name="cliente"
@@ -164,7 +280,7 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         name="ubicacion"
         value={form.ubicacion}
         onChange={handleChange}
-        placeholder="Ubicación / Google Maps"
+        placeholder="Ubicación"
         className="min-w-[180px] px-3 py-2 border rounded"
       />
 
@@ -177,7 +293,6 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         className="min-w-[180px] px-3 py-2 border rounded"
       />
 
-      {/* Nuevo campo de notas */}
       <input
         type="text"
         name="notas"
@@ -187,21 +302,23 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         className="min-w-[180px] px-3 py-2 border rounded"
       />
 
-      {/* Mensajero */}
-      <div className="flex flex-col min-w-[130px]">
-        <select
-          name="mensajero"
-          value={form.mensajero}
-          onChange={(e) => setForm(prev => ({ ...prev, mensajero: e.target.value }))}
-          className="px-3 py-2 border rounded"
-        >
-          <option value="">Mensajero</option>
-          {mensajeros.map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-      </div>
+      {/* MENSAJERO */}
+      <select
+        name="mensajero"
+        value={form.mensajero}
+        onChange={handleChange}
+        className="min-w-[130px] px-3 py-2 border rounded"
+      >
+        <option value="">Mensajero</option>
 
+        {mensajeros.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+
+      {/* ESTADO */}
       <select
         name="estado"
         value={form.estado}
@@ -213,6 +330,7 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         <option>Mañana</option>
       </select>
 
+      {/* FECHA */}
       <input
         type="date"
         name="fecha"
@@ -222,26 +340,27 @@ export default function RegistroEnvioForm({ onSave, onCancel, initialData, modo 
         required
       />
 
+      {/* BOTONES */}
       <div className="flex items-center gap-4">
-        {initialData && (
+        {initialData ? (
           <button
             type="button"
             disabled={cargando}
             onClick={() => handleGuardar('actualizar')}
-            className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
           >
-            Actualizar
+            {cargando ? 'Actualizando...' : 'Actualizar'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={cargando}
+            onClick={() => handleGuardar('crear')}
+            className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white"
+          >
+            {cargando ? 'Guardando...' : 'Crear'}
           </button>
         )}
-
-        <button
-          type="button"
-          disabled={cargando}
-          onClick={() => handleGuardar('crear')}
-          className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
-        >
-          Crear
-        </button>
 
         {onCancel && (
           <button
