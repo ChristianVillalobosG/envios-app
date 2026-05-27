@@ -109,96 +109,117 @@ export default function TablaEnvios({ refresh }) {
 
   /* ---------- FETCH ---------- */
   const fetchEnvios = async (showLoader = false) => {
-    try {
-      if (showLoader) setLoading(true)
+  try {
+    if (showLoader) setLoading(true)
 
-      const {
-        data: { user }
-      } = await supabase.auth.getUser()
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
 
-      if (!user) {
-        setEnvios([])
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('envios')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-if (error) {
-  console.error(error)
-  toast.error('Error cargando envíos')
-  return
-}
-
-console.log('ENVÍOS FETCH:', data)
-
-setEnvios(data || [])
-
-      setActualizados((prev) => {
-        const nuevo = { ...prev }
-
-        data?.forEach((e) => {
-          if (e.actualizado && !nuevo[e.id]) {
-            nuevo[e.id] = true
-          }
-        })
-
-        return nuevo
-      })
-    } catch (err) {
-      console.error(err)
-    } finally {
-      if (showLoader) {
-        setTimeout(() => {
-          setLoading(false)
-          setIsFirstLoad(false)
-        }, 600)
-      }
-    }
-  }
-
-  /* ---------- REALTIME ---------- */
-useEffect(() => {
-  fetchEnvios(true) 
-
- 
-}, [refresh])
-
-useEffect(() => {
-  const canal = supabase
-    .channel('envios-realtime')
- .on(
-  'postgres_changes',
-  {
-    event: '*',
-    schema: 'public',
-    table: 'envios'
-  },
-  async (payload) => {
-
-    // ⚡ Ignorar cambios SOLO de completado
-    if (
-      payload.eventType === 'UPDATE' &&
-      payload.new?.completado !== payload.old?.completado &&
-      payload.new?.estado === payload.old?.estado &&
-      payload.new?.fecha === payload.old?.fecha
-    ) {
+    if (!user) {
+      setEnvios([])
       return
     }
 
-    await fetchEnvios(false)
+    // Buscar si el usuario pertenece a un grupo
+    const { data: grupoUsuario, error: grupoError } =
+      await supabase
+        .from('usuarios_grupo')
+        .select('grupo_id')
+        .eq('user_id', user.id)
+        .single()
+
+    let query = supabase
+      .from('envios')
+      .select('*')
+
+    // Usuario autorizado en grupo
+    if (grupoUsuario?.grupo_id) {
+      query = query.eq(
+        'grupo_id',
+        grupoUsuario.grupo_id
+      )
+    }
+    // Usuario independiente
+    else {
+      query = query.eq(
+        'user_id',
+        user.id
+      )
+    }
+
+    const { data, error } = await query.order(
+      'created_at',
+      { ascending: false }
+    )
+
+    if (grupoError && grupoError.code !== 'PGRST116') {
+      console.error(grupoError)
+    }
+
+    if (error) {
+      console.error(error)
+      toast.error('Error cargando envíos')
+      return
+    }
+
+    console.log('USUARIO:', user.id)
+    console.log('GRUPO:', grupoUsuario?.grupo_id)
+    console.log('ENVÍOS FETCH:', data)
+
+    setEnvios(data || [])
+
+    setActualizados((prev) => {
+      const nuevo = { ...prev }
+
+      data?.forEach((e) => {
+        if (e.actualizado && !nuevo[e.id]) {
+          nuevo[e.id] = true
+        }
+      })
+
+      return nuevo
+    })
+
+  } catch (err) {
+    console.error(err)
+
+  } finally {
+    if (showLoader) {
+      setTimeout(() => {
+        setLoading(false)
+        setIsFirstLoad(false)
+      }, 600)
+    }
   }
-)
+}
+
+  /* ---------- REALTIME ---------- */
+useEffect(() => {
+  fetchEnvios(true)
+
+  const canal = supabase
+    .channel('envios-realtime')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'envios'
+      },
+      (payload) => {
+        console.log('Realtime:', payload)
+
+        fetchEnvios(false)
+      }
+    )
     .subscribe()
 
   return () => {
     supabase.removeChannel(canal)
-  } 
+  }
+}, []) 
 
-  
-}, [])
   /* ---------- FILTRADO ---------- */
 const enviosFiltradosOrdenados = useMemo(() => {
   let datos = [...envios]

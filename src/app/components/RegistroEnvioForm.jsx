@@ -155,9 +155,22 @@ const handleChange = (e) => {
 
       const user = session.user
 
-    const envioData = {
+let grupoId = null
+
+const { data: grupoUsuario } = await supabase
+  .from('usuarios_grupo')
+  .select('grupo_id')
+  .eq('user_id', user.id)
+  .single()
+
+if (grupoUsuario?.grupo_id) {
+  grupoId = grupoUsuario.grupo_id
+}
+
+const envioData = {
   ...form,
-  user_id: user.id
+  user_id: user.id,
+  grupo_id: grupoId
 }
 
 console.log('USER ID:', user.id)
