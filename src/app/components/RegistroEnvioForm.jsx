@@ -170,8 +170,11 @@ if (grupoUsuario?.grupo_id) {
 const envioData = {
   ...form,
   user_id: user.id,
-  grupo_id: grupoId
+  grupo_id: grupoId, 
+  origen_navegador:
+    sessionStorage.getItem('navegador_id')
 }
+
 
 console.log('USER ID:', user.id)
 console.log('SESSION:', session)

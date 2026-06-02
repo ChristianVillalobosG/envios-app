@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+
 import { supabase } from '@/app/lib/supabase'
 import { Pencil, Trash2, Check, Copy } from 'lucide-react'
 import { toast } from 'sonner'
@@ -8,7 +8,8 @@ import dayjs from 'dayjs'
 import RegistroEnvioForm from './RegistroEnvioForm'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
-import { useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation' 
+import { useEffect, useState, useMemo, useRef } from 'react'
 
 /* ---------- Modal ---------- */
 function Modal({ isOpen, onClose, title, children }) {
@@ -80,7 +81,21 @@ const TableBarLoader = () => (
 
 /* ---------- TablaEnvios ---------- */
 export default function TablaEnvios({ refresh }) {
-  const router = useRouter()
+  const router = useRouter() 
+
+  const navegadorId = useRef(null) 
+  const ultimoDeleteRef = useRef(null)
+
+if (!navegadorId.current) {
+  navegadorId.current =
+    sessionStorage.getItem('navegador_id') ||
+    crypto.randomUUID()
+
+  sessionStorage.setItem(
+    'navegador_id',
+    navegadorId.current
+  )
+}
 
   const [envios, setEnvios] = useState([])
   const [busqueda, setBusqueda] = useState('')
@@ -194,7 +209,9 @@ export default function TablaEnvios({ refresh }) {
   }
 }
 
-  /* ---------- REALTIME ---------- */
+  /* ---------- REALTIME ---------- */ 
+const sessionId = useRef(crypto.randomUUID())
+
 useEffect(() => {
   fetchEnvios(true)
 
@@ -207,18 +224,73 @@ useEffect(() => {
         schema: 'public',
         table: 'envios'
       },
-      (payload) => {
-        console.log('Realtime:', payload)
+ (payload) => {
+  fetchEnvios(false)
 
+  const origenEvento =
+  payload.new?.origen_navegador ||
+  payload.old?.origen_navegador
+
+ if (origenEvento === navegadorId.current) {
+  return
+}
+// INSERT
+if (payload.eventType === 'INSERT') {
+  toast.success('📦 Nuevo envío agregado')
+  return
+}
+
+// DELETE
+// DELETE
+if (payload.eventType === 'DELETE') {
+  toast.success('🗑️ Se eliminó un envío')
+  return
+}
+
+// EMPACADO
+if (
+  payload.eventType === 'UPDATE' &&
+  payload.new?.completado !== payload.old?.completado
+) {
+  toast.success(
+    payload.new.completado
+      ? '📦 Se empacó un envío'
+      : '📦 Se desmarcó un envío'
+  )
+  return
+}
+
+// DESCRIPCIÓN REVISADA
+if (
+  payload.eventType === 'UPDATE' &&
+  payload.new?.descripcion_editada !== payload.old?.descripcion_editada
+) {
+  return
+}
+
+// ACTUALIZACIÓN GENERAL
+if (payload.eventType === 'UPDATE') {
+  toast.success('✏️ Se actualizó un envío')
+}
+}
+    )
+    .subscribe((status) => {
+      console.log('Realtime status:', status)
+
+      if (status === 'SUBSCRIBED') {
         fetchEnvios(false)
       }
-    )
-    .subscribe()
+    })
 
+  // respaldo si realtime se desconecta
+ const intervalo = setInterval(() => {
+  fetchEnvios(false)
+}, 300000)
   return () => {
+    clearInterval(intervalo)
     supabase.removeChannel(canal)
   }
-}, []) 
+}, [])
 
   /* ---------- FILTRADO ---------- */
 const enviosFiltradosOrdenados = useMemo(() => {
@@ -398,9 +470,15 @@ const cambiarEstado = async (id, nuevoEstado) => {
       .update({
         estado: nuevoEstado,
         fecha: nuevaFecha,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(), 
+        origen_navegador:
+  sessionStorage.getItem('navegador_id')
       })
-      .eq('id', id)
+      .eq('id', id) 
+
+      if (!error) {
+  toast.success('✏️ Envío actualizado')
+}
 
     if (error) {
       toast.error(error.message)
@@ -421,9 +499,15 @@ const cambiarEstado = async (id, nuevoEstado) => {
         .from('envios')
         .update({
           mensajero: nuevoMensajero,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(), 
+          origen_navegador:
+  sessionStorage.getItem('navegador_id')
         })
-        .eq('id', id)
+        .eq('id', id) 
+
+        if (!error) {
+  toast.success('✏️ Envío actualizado')
+}
 
       if (error) {
         toast.error(error.message)
@@ -442,7 +526,8 @@ const cambiarEstado = async (id, nuevoEstado) => {
     toast.warning('¿Eliminar envío?', {
       action: {
         label: 'Sí',
-        onClick: async () => {
+        onClick: async () => { 
+         ultimoDeleteRef.current = id
           const { error } = await supabase
             .from('envios')
             .delete()
@@ -464,7 +549,7 @@ const cambiarEstado = async (id, nuevoEstado) => {
     })
   }
 
-  /* ---------- TOGGLE COMPLETADO ---------- */
+ 
 /* ---------- TOGGLE COMPLETADO ---------- */
 const toggleCompletado = async (id, estadoActual) => {
   if (actualizandoCheck[id]) return
@@ -495,7 +580,9 @@ const toggleCompletado = async (id, estadoActual) => {
     const { error } = await supabase
       .from('envios')
       .update({
-        completado: nuevo
+        completado: nuevo, 
+        origen_navegador:
+  sessionStorage.getItem('navegador_id')
       })
       .eq('id', id)
 
@@ -526,7 +613,9 @@ const marcarDescripcionRevisada = async (id) => {
     const { error } = await supabase
       .from('envios')
       .update({
-        descripcion_editada: false
+        descripcion_editada: false, 
+        origen_navegador:
+  sessionStorage.getItem('navegador_id')
       })
       .eq('id', id)
 
@@ -887,6 +976,7 @@ Notas: *${e.notas || '-'}*\n\n`
       envio.completado
     ) 
   } 
+
 
 
   
