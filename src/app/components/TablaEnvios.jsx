@@ -275,19 +275,50 @@ if (payload.eventType === 'UPDATE') {
 }
     )
     .subscribe((status) => {
-      console.log('Realtime status:', status)
+  console.log('Realtime status:', status)
 
-      if (status === 'SUBSCRIBED') {
-        fetchEnvios(false)
-      }
-    })
+  if (status === 'SUBSCRIBED') {
+    fetchEnvios(false)
+  }
+
+  if (status === 'CHANNEL_ERROR') {
+    fetchEnvios(false)
+  }
+
+  if (status === 'TIMED_OUT') {
+    fetchEnvios(false)
+  }
+
+  if (status === 'CLOSED') {
+    setTimeout(() => {
+      fetchEnvios(false)
+    }, 2000)
+  }
+}) 
+
+ const handleVisibility = () => {
+    if (!document.hidden) {
+      console.log('Pestaña activa')
+      fetchEnvios(false)
+    }
+  }
+
+  document.addEventListener(
+    'visibilitychange',
+    handleVisibility
+  )
 
   // respaldo si realtime se desconecta
  const intervalo = setInterval(() => {
   fetchEnvios(false)
-}, 300000)
+}, 10000)
   return () => {
-    clearInterval(intervalo)
+    clearInterval(intervalo) 
+
+     document.removeEventListener(
+      'visibilitychange',
+      handleVisibility
+    )
     supabase.removeChannel(canal)
   }
 }, [])
