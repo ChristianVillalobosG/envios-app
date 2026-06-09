@@ -190,21 +190,24 @@ if (tipo === 'actualizar' && initialData?.id) {
 
   const { error } = await supabase
     .from('envios')
-    .update({
-      ...envioData,
+.update({
+  ...envioData,
 
-      descripcion_editada:
-        descripcionCambio
-          ? true
-          : initialData.descripcion_editada,
+  origen_navegador:
+    sessionStorage.getItem('navegador_id'),
 
-      descripcion_editada_at:
-        descripcionCambio
-          ? new Date().toISOString()
-          : initialData.descripcion_editada_at,
+  descripcion_editada:
+    descripcionCambio
+      ? true
+      : initialData.descripcion_editada,
 
-      updated_at: new Date().toISOString()
-    })
+  descripcion_editada_at:
+    descripcionCambio
+      ? new Date().toISOString()
+      : initialData.descripcion_editada_at,
+
+  updated_at: new Date().toISOString()
+})
     .eq('id', initialData.id)
     .select()
 
@@ -221,16 +224,21 @@ if (tipo === 'actualizar' && initialData?.id) {
   return
 }
       /* ---------- CREAR ---------- */
-      const { error } = await supabase
-        .from('envios')
-        .insert([
-          {
-            ...envioData,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ])
-        .select()
+ const { data, error } = await supabase
+  .from('envios')
+.insert([
+  {
+    ...envioData,
+
+    origen_navegador:
+      sessionStorage.getItem('navegador_id'),
+
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }
+])
+  .select()
+  .single()
 
       if (error) {
         toast.error(`❌ ${error.message}`)
@@ -239,7 +247,12 @@ if (tipo === 'actualizar' && initialData?.id) {
 
       toast.success('✅ Envío creado')
 
-      setForm({ ...formInicial })
+      setForm({ ...formInicial }) 
+
+      console.log(
+  'ENVIO CREADO:',
+  data
+)
 
       onSave?.()
       onCancel?.()

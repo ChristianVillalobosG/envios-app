@@ -83,8 +83,9 @@ const TableBarLoader = () => (
 export default function TablaEnvios({ refresh }) {
   const router = useRouter() 
 
-  const navegadorId = useRef(null) 
+  const navegadorId = useRef(null)  
   const ultimoDeleteRef = useRef(null)
+  
 
 if (!navegadorId.current) {
   navegadorId.current =
@@ -97,7 +98,7 @@ if (!navegadorId.current) {
   )
 }
 
-  const [envios, setEnvios] = useState([])
+  const [envios, setEnvios] = useState([]) 
   const [busqueda, setBusqueda] = useState('')
   const [fechaFiltro, setFechaFiltro] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
@@ -114,7 +115,7 @@ if (!navegadorId.current) {
   const [actualizandoCheck, setActualizandoCheck] = useState({}) 
  
 
-  const ITEMS_POR_PAGINA = 45
+const ITEMS_POR_PAGINA = 45
 
   useEffect(() => {
     const timer = setTimeout(() => setAnimacionesListas(true), 50)
@@ -163,10 +164,11 @@ if (!navegadorId.current) {
       )
     }
 
-    const { data, error } = await query.order(
-      'created_at',
-      { ascending: false }
-    )
+const { data, error } = await query
+  .order('created_at', {
+    ascending: false
+  })
+  .limit(200)
 
     if (grupoError && grupoError.code !== 'PGRST116') {
       console.error(grupoError)
@@ -180,7 +182,10 @@ if (!navegadorId.current) {
 
     console.log('USUARIO:', user.id)
     console.log('GRUPO:', grupoUsuario?.grupo_id)
-    console.log('ENVÍOS FETCH:', data)
+    console.log(
+  'ENVÍOS FETCH:',
+  data.length
+)
 
     setEnvios(data || [])
 
@@ -210,9 +215,9 @@ if (!navegadorId.current) {
 }
 
   /* ---------- REALTIME ---------- */ 
-const sessionId = useRef(crypto.randomUUID())
+useEffect(() => { 
 
-useEffect(() => {
+    console.log('MONTA REALTIME')
   fetchEnvios(true)
 
   const canal = supabase
@@ -224,78 +229,167 @@ useEffect(() => {
         schema: 'public',
         table: 'envios'
       },
- (payload) => {
-  fetchEnvios(false)
+ (payload) => { 
+
+    console.log(
+    'EVENTO REALTIME:',
+    payload.eventType,
+    payload
+  )  
+
+  console.log(
+  'PAYLOAD COMPLETO:',
+  JSON.stringify(payload)
+)
+
+console.log(
+  'ORIGEN:',
+  payload.new?.origen_navegador,
+  payload.old?.origen_navegador
+)
+
+console.log(
+  'NAVEGADOR ACTUAL:',
+  navegadorId.current
+)
 
   const origenEvento =
   payload.new?.origen_navegador ||
   payload.old?.origen_navegador
 
- if (origenEvento === navegadorId.current) {
-  return
-}
-// INSERT
-if (payload.eventType === 'INSERT') {
-  toast.success('📦 Nuevo envío agregado')
-  return
-}
+const esMiEvento =
+  origenEvento === navegadorId.current
 
-// DELETE
-// DELETE
+
+ // INSERT
+if (payload.eventType === 'INSERT') {
+
+  setEnvios(prev => {
+
+    const existe = prev.some(
+      e => e.id === payload.new.id
+    )
+
+    if (existe) return prev
+
+    return [
+  payload.new,
+  ...prev
+].slice(0, 200)
+  }) 
+
+    setPaginaActual(1)
+
+  if (!esMiEvento) {
+    toast.success('📦 Nuevo envío agregado')
+  }
+
+  return
+}
+ // DELETE
 if (payload.eventType === 'DELETE') {
-  toast.success('🗑️ Se eliminó un envío')
+
+  const esMiDelete =
+    payload.old.id ===
+    ultimoDeleteRef.current
+
+  setEnvios(prev =>
+    prev.filter(
+      e => e.id !== payload.old.id
+    )
+  )
+
+  if (!esMiDelete) {
+    toast.success('🗑️ Se eliminó un envío')
+  }
+
   return
 }
 
 // EMPACADO
 if (
   payload.eventType === 'UPDATE' &&
-  payload.new?.completado !== payload.old?.completado
+  payload.new?.completado !==
+    payload.old?.completado
 ) {
-  toast.success(
-    payload.new.completado
-      ? '📦 Se empacó un envío'
-      : '📦 Se desmarcó un envío'
+
+  setEnvios(prev =>
+    prev.map(envio =>
+      envio.id === payload.new.id
+        ? payload.new
+        : envio
+    )
   )
+
+  if (!esMiEvento) {
+    toast.success(
+      payload.new.completado
+        ? '📦 Se empacó un envío'
+        : '📦 Se desmarcó un envío'
+    )
+  }
+
   return
 }
-
-// DESCRIPCIÓN REVISADA
+ // DESCRIPCIÓN REVISADA
 if (
   payload.eventType === 'UPDATE' &&
-  payload.new?.descripcion_editada !== payload.old?.descripcion_editada
+  payload.new?.descripcion_editada !==
+    payload.old?.descripcion_editada
 ) {
+
+  setEnvios(prev =>
+    prev.map(envio =>
+      envio.id === payload.new.id
+        ? payload.new
+        : envio
+    )
+  )
+
   return
 }
 
 // ACTUALIZACIÓN GENERAL
 if (payload.eventType === 'UPDATE') {
-  toast.success('✏️ Se actualizó un envío')
+
+  setEnvios(prev =>
+    prev.map(envio =>
+      envio.id === payload.new.id
+        ? payload.new
+        : envio
+    )
+  )
+
+  if (!esMiEvento) {
+    toast.success('✏️ Se actualizó un envío')
+  }
+
+  return
 }
 }
     )
-    .subscribe((status) => {
-  console.log('Realtime status:', status)
+.subscribe((status) => {
 
-  if (status === 'SUBSCRIBED') {
-    fetchEnvios(false)
-  }
+  console.log(
+    'Realtime status:',
+    status
+  )
 
-  if (status === 'CHANNEL_ERROR') {
-    fetchEnvios(false)
-  }
+  if (
+    status === 'CHANNEL_ERROR' ||
+    status === 'TIMED_OUT'
+   
+  ) {
 
-  if (status === 'TIMED_OUT') {
-    fetchEnvios(false)
-  }
+    console.log(
+      'Realtime desconectado'
+    )
 
-  if (status === 'CLOSED') {
     setTimeout(() => {
       fetchEnvios(false)
-    }, 2000)
+    }, 1000)
   }
-}) 
-
+})
  const handleVisibility = () => {
     if (!document.hidden) {
       console.log('Pestaña activa')
@@ -309,9 +403,19 @@ if (payload.eventType === 'UPDATE') {
   )
 
   // respaldo si realtime se desconecta
- const intervalo = setInterval(() => {
-  fetchEnvios(false)
-}, 10000)
+const intervalo = setInterval(() => {
+
+  if (canal.state !== 'joined') {
+
+    console.log('Reactivando realtime...')
+
+    canal.subscribe()
+
+    fetchEnvios(false)
+  }
+
+}, 60000)
+
   return () => {
     clearInterval(intervalo) 
 
@@ -475,7 +579,16 @@ const enviosFiltradosOrdenados = useMemo(() => {
 
   useEffect(() => {
     setPaginaActual(1)
-  }, [busqueda, fechaFiltro, estadoFiltro, mensajeroFiltro])
+  }, [busqueda, fechaFiltro, estadoFiltro, mensajeroFiltro]) 
+
+  useEffect(() => {
+  if (
+    paginaActual > totalPaginas &&
+    totalPaginas > 0
+  ) {
+    setPaginaActual(totalPaginas)
+  }
+}, [paginaActual, totalPaginas])
 
   /* ---------- CAMBIAR ESTADO ---------- */
 const cambiarEstado = async (id, nuevoEstado) => {
@@ -516,7 +629,6 @@ const cambiarEstado = async (id, nuevoEstado) => {
       return
     }
 
-    await fetchEnvios()
 
   } catch (err) {
     console.error(err)
@@ -545,41 +657,38 @@ const cambiarEstado = async (id, nuevoEstado) => {
         return
       }
 
-      await fetchEnvios()
-
     } catch (err) {
       console.error(err)
     }
   }
 
   /* ---------- ELIMINAR ---------- */
-  const eliminarEnvio = (id) => {
-    toast.warning('¿Eliminar envío?', {
-      action: {
-        label: 'Sí',
-        onClick: async () => { 
-         ultimoDeleteRef.current = id
-          const { error } = await supabase
-            .from('envios')
-            .delete()
-            .eq('id', id)
+const eliminarEnvio = (id) => {
+  toast.warning('¿Eliminar envío?', {
+    action: {
+      label: 'Sí',
+      onClick: async () => {
 
-          if (error) {
-            toast.error(error.message)
-            return
-          }
+        ultimoDeleteRef.current = id
 
-          await fetchEnvios()
+        const { error } = await supabase
+          .from('envios')
+          .delete()
+          .eq('id', id)
 
-          toast.success('Envío eliminado')
+        if (error) {
+          toast.error(error.message)
+          return
         }
-      },
-      cancel: {
-        label: 'Cancelar'
-      }
-    })
-  }
 
+        toast.success('Envío eliminado')
+      }
+    },
+    cancel: {
+      label: 'Cancelar'
+    }
+  })
+}
  
 /* ---------- TOGGLE COMPLETADO ---------- */
 const toggleCompletado = async (id, estadoActual) => {
@@ -657,7 +766,7 @@ const marcarDescripcionRevisada = async (id) => {
 
     toast.success('✓ Cambio revisado')
 
-    await fetchEnvios()
+
 
   } catch (err) {
     console.error(err)
@@ -695,7 +804,6 @@ const marcarDescripcionRevisada = async (id) => {
   }
 
   const guardarEnvio = async () => {
-    await fetchEnvios()
 
     setEditandoDesdeModal(false)
     setOriginalDelModal(null)
