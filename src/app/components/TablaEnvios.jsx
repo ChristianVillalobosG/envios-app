@@ -79,6 +79,13 @@ const TableBarLoader = () => (
   </div>
 )
 
+const normalizarTexto = (txt) =>
+  String(txt ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim() 
+    
 /* ---------- TablaEnvios ---------- */
 export default function TablaEnvios({ refresh }) {
   const router = useRouter() 
@@ -431,62 +438,76 @@ const intervalo = setInterval(() => {
 const enviosFiltradosOrdenados = useMemo(() => {
   let datos = [...envios]
 
+  // BUSCADOR
   if (busqueda.trim()) {
-    const f = busqueda.toLowerCase()
+    const filtro = busqueda.toLowerCase()
 
     datos = datos.filter((e) =>
-      Object.values(e).some((v) =>
-        String(v ?? '').toLowerCase().includes(f)
+      Object.values(e).some((valor) =>
+        String(valor ?? '')
+          .toLowerCase()
+          .includes(filtro)
       )
     )
   }
 
+  // FECHA
   if (fechaFiltro) {
-    datos = datos.filter((e) => e.fecha === fechaFiltro)
-  }
-
-  if (mensajeroFiltro) {
-    datos = datos.filter((e) => e.mensajero === mensajeroFiltro)
-  }
-
-  if (estadoFiltro) {
-    const normalizar = (txt) =>
-      txt
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-
-    const estadoNorm = normalizar(estadoFiltro)
-
     datos = datos.filter(
-      (e) => normalizar(e.estado || '') === estadoNorm
+      (e) => e.fecha === fechaFiltro
     )
   }
 
+  // MENSAJERO
+  if (mensajeroFiltro) {
+    datos = datos.filter(
+      (e) => e.mensajero === mensajeroFiltro
+    )
+  }
+
+  // ESTADO
+  if (estadoFiltro) {
+    const estadoNorm =
+      normalizarTexto(estadoFiltro)
+
+    datos = datos.filter(
+      (e) =>
+        normalizarTexto(e.estado) ===
+        estadoNorm
+    )
+  }
+
+  // FECHAS DE REFERENCIA
   const hoy = new Date()
 
   const hoyLocal = new Date(
-    hoy.getTime() - hoy.getTimezoneOffset() * 60000
+    hoy.getTime() -
+      hoy.getTimezoneOffset() * 60000
   )
 
-  const hoyStr = hoyLocal.toISOString().split('T')[0]
+  const hoyStr =
+    hoyLocal.toISOString().split('T')[0]
 
   const manana = new Date(hoyLocal)
 
-  manana.setDate(manana.getDate() + 1)
+  manana.setDate(
+    manana.getDate() + 1
+  )
 
-  const mananaStr = manana.toISOString().split('T')[0]
+  const mananaStr =
+    manana.toISOString().split('T')[0]
 
   const obtenerPrioridad = (envio) => {
     const fecha = envio.fecha
 
-    // Invalid Date
-    if (!fecha || isNaN(new Date(fecha).getTime())) {
+    if (
+      !fecha ||
+      isNaN(new Date(fecha).getTime())
+    ) {
       return 6
     }
 
-    // En la mañana hoy
+    // Hoy mañana
     if (
       envio.estado === 'En la mañana' &&
       fecha === hoyStr
@@ -494,7 +515,7 @@ const enviosFiltradosOrdenados = useMemo(() => {
       return 1
     }
 
-    // En la tarde hoy
+    // Hoy tarde
     if (
       envio.estado === 'En la tarde' &&
       fecha === hoyStr
@@ -523,20 +544,25 @@ const enviosFiltradosOrdenados = useMemo(() => {
   }
 
   datos.sort((a, b) => {
-    const prioridadA = obtenerPrioridad(a)
-    const prioridadB = obtenerPrioridad(b)
+    const prioridadA =
+      obtenerPrioridad(a)
+
+    const prioridadB =
+      obtenerPrioridad(b)
 
     if (prioridadA !== prioridadB) {
       return prioridadA - prioridadB
     }
 
     const fechaA =
-      a.fecha && !isNaN(new Date(a.fecha))
+      a.fecha &&
+      !isNaN(new Date(a.fecha))
         ? new Date(a.fecha).getTime()
         : null
 
     const fechaB =
-      b.fecha && !isNaN(new Date(b.fecha))
+      b.fecha &&
+      !isNaN(new Date(b.fecha))
         ? new Date(b.fecha).getTime()
         : null
 
@@ -561,11 +587,11 @@ const enviosFiltradosOrdenados = useMemo(() => {
   return datos
 
 }, [
+  envios,
   busqueda,
   fechaFiltro,
-  estadoFiltro,
   mensajeroFiltro,
-  envios
+  estadoFiltro
 ])
 
   const totalPaginas = Math.ceil(
