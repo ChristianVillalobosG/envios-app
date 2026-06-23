@@ -926,6 +926,14 @@ Notas: *${e.notas || '-'}*\n\n`
     return <TableBarLoader />
   }
 
+
+const hayFiltros =
+  busqueda.trim() !== '' ||
+  fechaFiltro !== '' ||
+  estadoFiltro !== '' ||
+  mensajeroFiltro !== ''
+
+
     return (
     <div className="mt-8 overflow-x-auto rounded-xl shadow-lg bg-white text-zinc-900 font-sans">
 
@@ -973,18 +981,16 @@ Notas: *${e.notas || '-'}*\n\n`
 
       {/* BOTONES SUPERIORES */}
       <div className="flex flex-wrap justify-end gap-3 px-6 py-3 border-b border-gray-300"> 
-        <div className="mr-auto font-medium"
-  style={{
-    display: 'inline-block',
-    background: '#e8f5e9',
-    color: '#2e7d32',
-    padding: '6px 12px',
-    borderRadius: '8px',
-    fontWeight: '600'
-  }}
->
-  📦 {enviosFiltradosOrdenados.length} Envíos
-</div>
+{hayFiltros && (
+  <div className="text-gray-700 text-sm mr-auto gap-2 flex items-center"
+    style={{
+      padding: '10px 20px',
+      fontWeight: 'bold'
+    }}
+  >
+    🔍 Se encontraron {enviosFiltradosOrdenados.length} envíos
+  </div>
+)}
 
         <button
           onClick={() => exportarExcel(true)}
