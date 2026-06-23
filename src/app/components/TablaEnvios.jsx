@@ -972,7 +972,19 @@ Notas: *${e.notas || '-'}*\n\n`
       </div>
 
       {/* BOTONES SUPERIORES */}
-      <div className="flex flex-wrap justify-end gap-3 px-6 py-3 border-b border-gray-300">
+      <div className="flex flex-wrap justify-end gap-3 px-6 py-3 border-b border-gray-300"> 
+        <div className="mr-auto font-medium"
+  style={{
+    display: 'inline-block',
+    background: '#e8f5e9',
+    color: '#2e7d32',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    fontWeight: '600'
+  }}
+>
+  📦 {enviosFiltradosOrdenados.length} Envíos
+</div>
 
         <button
           onClick={() => exportarExcel(true)}
