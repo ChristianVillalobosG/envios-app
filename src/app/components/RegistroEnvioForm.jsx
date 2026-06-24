@@ -180,7 +180,7 @@ console.log('USER ID:', user.id)
 console.log('SESSION:', session)
 console.log('ENVIO DATA:', envioData)
 
-      /* ---------- ACTUALIZAR ---------- */
+    
      /* ---------- ACTUALIZAR ---------- */
 if (tipo === 'actualizar' && initialData?.id) {
 
@@ -188,40 +188,46 @@ if (tipo === 'actualizar' && initialData?.id) {
     (initialData.descripcion || '').trim() !==
     (form.descripcion || '').trim()
 
-  const { error } = await supabase
-    .from('envios')
-.update({
-  ...envioData,
+const { data, error } = await supabase
+  .from('envios')
+  .update({
+    ...envioData,
 
-  origen_navegador:
-    sessionStorage.getItem('navegador_id'),
+    origen_navegador:
+      sessionStorage.getItem('navegador_id'),
 
-  descripcion_editada:
-    descripcionCambio
-      ? true
-      : initialData.descripcion_editada,
+    descripcion_editada:
+      descripcionCambio
+        ? true
+        : initialData.descripcion_editada,
 
-  descripcion_editada_at:
-    descripcionCambio
-      ? new Date().toISOString()
-      : initialData.descripcion_editada_at,
+    descripcion_editada_at:
+      descripcionCambio
+        ? new Date().toISOString()
+        : initialData.descripcion_editada_at,
 
-  updated_at: new Date().toISOString()
-})
-    .eq('id', initialData.id)
-    .select()
+    updated_at: new Date().toISOString()
+  })
+  .eq('id', initialData.id)
+  .select()
+  .single()
 
-  if (error) {
-    toast.error(`❌ ${error.message}`)
-    return
-  }
+console.log(
+  'ENVIO ACTUALIZADO:',
+  data
+)
 
-  toast.success('✏️ Envío actualizado')
-
-  onSave?.()
-  onCancel?.()
-
+if (error) {
+  toast.error(`❌ ${error.message}`)
   return
+}
+
+toast.success('✔️ Envío actualizado')
+
+onSave?.()
+onCancel?.()
+
+return
 }
       /* ---------- CREAR ---------- */
  const { data, error } = await supabase
