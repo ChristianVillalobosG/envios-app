@@ -36,7 +36,8 @@ export default function RegistroEnvioForm({
     notas: '',
     mensajero: '',
     estado: 'En la mañana',
-    fecha: obtenerFechaHoy()
+    fecha: obtenerFechaHoy(), 
+    es_impresora: false
   }
 
   const [form, setForm] = useState(formInicial)
@@ -54,7 +55,8 @@ export default function RegistroEnvioForm({
         notas: initialData.notas ?? '',
         mensajero: initialData.mensajero ?? '',
         estado: initialData.estado ?? 'En la mañana',
-        fecha: initialData.fecha ?? obtenerFechaHoy()
+        fecha: initialData.fecha ?? obtenerFechaHoy(), 
+        es_impresora: initialData.es_impresora || false
       })
     } else {
       setForm({ ...formInicial })
@@ -224,7 +226,7 @@ if (error) {
 
 toast.success('✔️ Envío actualizado')
 
-onSave?.()
+onSave?.(data)
 onCancel?.()
 
 return
@@ -260,7 +262,7 @@ return
   data
 )
 
-      onSave?.()
+      onSave?.(data)
       onCancel?.()
 
     } catch (err) {
@@ -319,14 +321,35 @@ return
         className="min-w-[180px] px-3 py-2 border rounded"
       />
 
-      <input
-        type="text"
-        name="descripcion"
-        value={form.descripcion}
-        onChange={handleChange}
-        placeholder="Descripción"
-        className="min-w-[180px] px-3 py-2 border rounded"
-      />
+     <div className="flex flex-col min-w-[180px] pt-6">
+  <input
+    type="text"
+    name="descripcion"
+    value={form.descripcion}
+    onChange={handleChange}
+    placeholder="Descripción"
+    className="px-3 py-2 border rounded"
+  />
+
+ <label className="mt-1 flex items-center gap-2 text-sm cursor-pointer">
+    <input
+      type="checkbox"
+      checked={form.es_impresora}
+      onChange={(e) =>
+        setForm({
+          ...form,
+          es_impresora: e.target.checked
+        })
+      }
+      className="h-4 w-4"
+    />
+
+    <span className="text-sm">
+      Impresora
+    </span>
+  </label>
+</div>
+
 
       <input
         type="text"
@@ -335,7 +358,8 @@ return
         onChange={handleChange}
         placeholder="Notas"
         className="min-w-[180px] px-3 py-2 border rounded"
-      />
+      />  
+
 
       {/* MENSAJERO */}
       <select

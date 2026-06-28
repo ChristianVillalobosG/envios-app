@@ -9,7 +9,8 @@ import RegistroEnvioForm from './RegistroEnvioForm'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import { useRouter } from 'next/navigation' 
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react' 
+import { FaPrint } from 'react-icons/fa6'
 
 /* ---------- Modal ---------- */
 function Modal({ isOpen, onClose, title, children }) {
@@ -271,21 +272,7 @@ const esMiEvento =
  // INSERT
 if (payload.eventType === 'INSERT') {
 
-  setEnvios(prev => {
-
-    const existe = prev.some(
-      e => e.id === payload.new.id
-    )
-
-    if (existe) return prev
-
-    return [
-  payload.new,
-  ...prev
-].slice(0, 200)
-  }) 
-
-    setPaginaActual(1)
+  guardarEnvioLocal(payload.new)
 
   if (!esMiEvento) {
     toast.success('📦 Nuevo envío agregado')
@@ -293,20 +280,13 @@ if (payload.eventType === 'INSERT') {
 
   return
 }
- // DELETE
+
+// DELETE
 if (payload.eventType === 'DELETE') {
 
-  const esMiDelete =
-    payload.old.id ===
-    ultimoDeleteRef.current
+  eliminarEnvioLocal(payload.old.id)
 
-  setEnvios(prev =>
-    prev.filter(
-      e => e.id !== payload.old.id
-    )
-  )
-
-  if (!esMiDelete) {
+  if (!esMiEvento) {
     toast.success('🗑️ Se eliminó un envío')
   }
 
@@ -320,13 +300,7 @@ if (
     payload.old?.completado
 ) {
 
-  setEnvios(prev =>
-    prev.map(envio =>
-      envio.id === payload.new.id
-        ? payload.new
-        : envio
-    )
-  )
+guardarEnvioLocal(payload.new)
 
   if (!esMiEvento) {
     toast.success(
@@ -345,13 +319,7 @@ if (
     payload.old?.descripcion_editada
 ) {
 
-  setEnvios(prev =>
-    prev.map(envio =>
-      envio.id === payload.new.id
-        ? payload.new
-        : envio
-    )
-  )
+guardarEnvioLocal(payload.new)
 
   return
 }
@@ -359,13 +327,7 @@ if (
 // ACTUALIZACIÓN GENERAL
 if (payload.eventType === 'UPDATE') {
 
-  setEnvios(prev =>
-    prev.map(envio =>
-      envio.id === payload.new.id
-        ? payload.new
-        : envio
-    )
-  )
+  guardarEnvioLocal(payload.new)
 
   if (!esMiEvento) {
     toast.success('✏️ Se actualizó un envío')
@@ -697,17 +659,19 @@ const eliminarEnvio = (id) => {
 
         ultimoDeleteRef.current = id
 
-        const { error } = await supabase
-          .from('envios')
-          .delete()
-          .eq('id', id)
+       const { error } = await supabase
+  .from('envios')
+  .delete()
+  .eq('id', id)
 
-        if (error) {
-          toast.error(error.message)
-          return
-        }
+if (error) {
+  toast.error(error.message)
+  return
+}
 
-        toast.success('Envío eliminado')
+eliminarEnvioLocal(id)
+
+toast.success('Envío eliminado')
       }
     },
     cancel: {
@@ -827,13 +791,50 @@ const marcarDescripcionRevisada = async (id) => {
     setEnvioEditando(null)
     setOriginalDelModal(null)
     setEditandoDesdeModal(false)
-  }
+  } 
 
-  const guardarEnvio = async () => {
+const guardarEnvioLocal = (envio) => {
 
-    setEditandoDesdeModal(false)
-    setOriginalDelModal(null)
-  }
+  setEnvios(prev => {
+
+    const existe = prev.some(e => e.id === envio.id)
+
+    if (existe) {
+      return prev.map(e =>
+        e.id === envio.id
+          ? envio
+          : e
+      )
+    }
+
+    
+    return [
+      envio,
+      ...prev
+    ].slice(0, 200)
+
+  })
+
+  setPaginaActual(1)
+}
+
+const eliminarEnvioLocal = (id) => {
+  setEnvios(prev =>
+    prev.filter(e => e.id !== id)
+  )
+} 
+
+
+const guardarEnvio = async (envio) => {
+
+  if (!envio) return
+
+  guardarEnvioLocal(envio)
+
+  setEditandoDesdeModal(false)
+  setOriginalDelModal(null)
+}
+
 
   /* ---------- EXPORTAR ---------- */
   const exportarExcel = (soloFiltrados) => {
@@ -1046,17 +1047,31 @@ const hayFiltros =
               </td>
             </tr>
           ) : enviosPagina.map((envio) => (
-            <tr
+          <tr
   key={envio.id}
   className={`border-b align-top transition-colors ${
     actualizados[envio.id]
-      ? actualizados[envio.id] === "fijo"
-        ? "bg-yellow-300"
-        : `bg-yellow-300 ${animacionesListas ? "animate-pulse" : ""}`
-      : "bg-white hover:bg-gray-100"
+      ? actualizados[envio.id] === 'fijo'
+        ? 'bg-yellow-300'
+        : `bg-yellow-300 ${animacionesListas ? 'animate-pulse' : ''}`
+      : envio.es_impresora
+        ? 'bg-blue-50 hover:bg-blue-100'
+        : 'bg-white hover:bg-gray-100'
   }`}
 >
-              <td className="p-3 break-words max-w-[180px]">{envio.cliente}</td>
+              <td className="p-3 break-words max-w-[180px]">
+  <div className="flex items-center gap-2">
+    {envio.es_impresora && (
+      <FaPrint
+        size={18}
+        className="text-blue-600 flex-shrink-0"
+        title="Impresora 3D"
+      />
+    )}
+
+    <span>{envio.cliente}</span>
+  </div>
+</td>
               <td className="p-3 break-words max-w-[150px]">{envio.provincia}</td>
               <td className="p-3 break-words max-w-[140px]">{envio.telefono}</td>
 
