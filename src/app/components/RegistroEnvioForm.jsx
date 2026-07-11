@@ -5,10 +5,10 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({
-  onSave,
+  tablaRef,
   onCancel,
   initialData,
-  modo = 'lineal'
+  modo
 }) {
   const mensajeros = [
     'Jose',
@@ -226,7 +226,7 @@ if (error) {
 
 toast.success('✔️ Envío actualizado')
 
-onSave?.(data)
+tablaRef.current?.actualizarEnvioLocal(data)
 onCancel?.()
 
 return
@@ -251,7 +251,9 @@ return
       if (error) {
         toast.error(`❌ ${error.message}`)
         return
-      }
+      } 
+
+       tablaRef.current?.guardarEnvioLocal(data)
 
       toast.success('✅ Envío creado')
 
@@ -261,8 +263,7 @@ return
   'ENVIO CREADO:',
   data
 )
-
-      onSave?.(data)
+     
       onCancel?.()
 
     } catch (err) {

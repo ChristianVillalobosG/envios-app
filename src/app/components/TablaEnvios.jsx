@@ -9,7 +9,14 @@ import RegistroEnvioForm from './RegistroEnvioForm'
 import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import { useRouter } from 'next/navigation' 
-import { useEffect, useState, useMemo, useRef } from 'react' 
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  forwardRef,
+  useImperativeHandle
+} from 'react'
 import { FaPrint } from 'react-icons/fa6'
 
 /* ---------- Modal ---------- */
@@ -88,7 +95,7 @@ const normalizarTexto = (txt) =>
     .trim() 
     
 /* ---------- TablaEnvios ---------- */
-export default function TablaEnvios({ refresh }) {
+const TablaEnvios = forwardRef(({ refresh }, ref) => {
   const router = useRouter() 
 
   const navegadorId = useRef(null)  
@@ -300,7 +307,8 @@ if (
     payload.old?.completado
 ) {
 
-guardarEnvioLocal(payload.new)
+
+actualizarEnvioLocal(payload.new)
 
   if (!esMiEvento) {
     toast.success(
@@ -319,7 +327,8 @@ if (
     payload.old?.descripcion_editada
 ) {
 
-guardarEnvioLocal(payload.new)
+
+actualizarEnvioLocal(payload.new)
 
   return
 }
@@ -327,7 +336,8 @@ guardarEnvioLocal(payload.new)
 // ACTUALIZACIÓN GENERAL
 if (payload.eventType === 'UPDATE') {
 
-  guardarEnvioLocal(payload.new)
+  
+actualizarEnvioLocal(payload.new)
 
   if (!esMiEvento) {
     toast.success('✏️ Se actualizó un envío')
@@ -576,47 +586,57 @@ const enviosFiltradosOrdenados = useMemo(() => {
   ) {
     setPaginaActual(totalPaginas)
   }
-}, [paginaActual, totalPaginas])
+}, [paginaActual, totalPaginas]) 
+
 
   /* ---------- CAMBIAR ESTADO ---------- */
 const cambiarEstado = async (id, nuevoEstado) => {
+
+  const hoy = new Date()
+  const hoyLocal = new Date(
+    hoy.getTime() - hoy.getTimezoneOffset() * 60000
+  )
+
+  let nuevaFecha
+
+  if (nuevoEstado === 'Mañana') {
+    const manana = new Date(hoyLocal)
+    manana.setDate(manana.getDate() + 1)
+    nuevaFecha = manana.toISOString().split('T')[0]
+  } else {
+    nuevaFecha = hoyLocal.toISOString().split('T')[0]
+  }
+
+  // Actualización inmediata de la tabla
+  const envioActual = envios.find(e => e.id === id)
+
+  if (envioActual) {
+    guardarEnvioLocal({
+      ...envioActual,
+      estado: nuevoEstado,
+      fecha: nuevaFecha,
+      updated_at: new Date().toISOString()
+    })
+  }
+
   try {
-    const hoy = new Date()
-    const hoyLocal = new Date(
-      hoy.getTime() - hoy.getTimezoneOffset() * 60000
-    )
-
-    let nuevaFecha
-
-    if (nuevoEstado === 'Mañana') {
-      const manana = new Date(hoyLocal)
-      manana.setDate(manana.getDate() + 1)
-
-      nuevaFecha = manana.toISOString().split('T')[0]
-    } else {
-      nuevaFecha = hoyLocal.toISOString().split('T')[0]
-    }
 
     const { error } = await supabase
       .from('envios')
       .update({
         estado: nuevoEstado,
         fecha: nuevaFecha,
-        updated_at: new Date().toISOString(), 
-        origen_navegador:
-  sessionStorage.getItem('navegador_id')
+        updated_at: new Date().toISOString(),
+        origen_navegador: sessionStorage.getItem('navegador_id')
       })
-      .eq('id', id) 
-
-      if (!error) {
-  toast.success('✏️ Envío actualizado')
-}
+      .eq('id', id)
 
     if (error) {
       toast.error(error.message)
       return
     }
 
+    toast.success('✏️ Envío actualizado')
 
   } catch (err) {
     console.error(err)
@@ -624,31 +644,40 @@ const cambiarEstado = async (id, nuevoEstado) => {
 }
 
   /* ---------- CAMBIAR MENSAJERO ---------- */
-  const cambiarMensajero = async (id, nuevoMensajero) => {
-    try {
-      const { error } = await supabase
-        .from('envios')
-        .update({
-          mensajero: nuevoMensajero,
-          updated_at: new Date().toISOString(), 
-          origen_navegador:
-  sessionStorage.getItem('navegador_id')
-        })
-        .eq('id', id) 
+const cambiarMensajero = async (id, nuevoMensajero) => {
 
-        if (!error) {
-  toast.success('✏️ Envío actualizado')
-}
+  const envioActual = envios.find(e => e.id === id)
 
-      if (error) {
-        toast.error(error.message)
-        return
-      }
-
-    } catch (err) {
-      console.error(err)
-    }
+  if (envioActual) {
+    guardarEnvioLocal({
+      ...envioActual,
+      mensajero: nuevoMensajero,
+      updated_at: new Date().toISOString()
+    })
   }
+
+  try {
+
+    const { error } = await supabase
+      .from('envios')
+      .update({
+        mensajero: nuevoMensajero,
+        updated_at: new Date().toISOString(),
+        origen_navegador: sessionStorage.getItem('navegador_id')
+      })
+      .eq('id', id)
+
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+
+    toast.success('✏️ Envío actualizado')
+
+  } catch (err) {
+    console.error(err)
+  }
+}
 
   /* ---------- ELIMINAR ---------- */
 const eliminarEnvio = (id) => {
@@ -659,19 +688,24 @@ const eliminarEnvio = (id) => {
 
         ultimoDeleteRef.current = id
 
-       const { error } = await supabase
-  .from('envios')
-  .delete()
-  .eq('id', id)
+        // Eliminar inmediatamente de la tabla
+        eliminarEnvioLocal(id)
 
-if (error) {
-  toast.error(error.message)
-  return
-}
+        const { error } = await supabase
+          .from('envios')
+          .delete()
+          .eq('id', id)
 
-eliminarEnvioLocal(id)
+        if (error) {
+          toast.error(error.message)
 
-toast.success('Envío eliminado')
+          // Más adelante agregaremos rollback
+          fetchEnvios(false)
+
+          return
+        }
+
+        toast.success('Envío eliminado')
       }
     },
     cancel: {
@@ -692,21 +726,14 @@ const toggleCompletado = async (id, estadoActual) => {
 
     const nuevo = !estadoActual
 
-    setEnvios(prev => {
-      const copia = [...prev]
+    const envioActual = envios.find(e => e.id === id)
 
-      const index = copia.findIndex(e => e.id === id)
-
-      if (index !== -1) {
-        copia[index] = {
-          ...copia[index],
-          completado: nuevo
-        }
-      }
-
-      return copia
-    })
-
+if (envioActual) {
+  guardarEnvioLocal({
+    ...envioActual,
+    completado: nuevo
+  })
+}
     const { error } = await supabase
       .from('envios')
       .update({
@@ -791,7 +818,19 @@ const marcarDescripcionRevisada = async (id) => {
     setEnvioEditando(null)
     setOriginalDelModal(null)
     setEditandoDesdeModal(false)
-  } 
+  }  
+
+
+const actualizarEnvioLocal = (envioActualizado) => {
+  setEnvios(prev =>
+    prev.map(envio =>
+      envio.id === envioActualizado.id
+        ? envioActualizado
+        : envio
+    )
+  )
+}
+
 
 const guardarEnvioLocal = (envio) => {
 
@@ -825,11 +864,18 @@ const eliminarEnvioLocal = (id) => {
 } 
 
 
+useImperativeHandle(ref, () => ({
+  guardarEnvioLocal,
+  actualizarEnvioLocal,
+  eliminarEnvioLocal
+}))
+
+
 const guardarEnvio = async (envio) => {
 
   if (!envio) return
 
-  guardarEnvioLocal(envio)
+  guardarEnvioLocal(envio) 
 
   setEditandoDesdeModal(false)
   setOriginalDelModal(null)
@@ -1287,14 +1333,15 @@ const hayFiltros =
         title={envioEditando ? "Editar Envío" : "Crear Envío"}
       >
         <RegistroEnvioForm
-          initialData={envioEditando}
-          onSave={guardarEnvio}
-          onCancel={cerrarModal}
-          modo="columnas"
-        />
+  tablaRef={ref}
+  initialData={envioEditando}
+  onCancel={cerrarModal}
+  modo="columnas"
+/>
       </Modal>
 
     </div>
   )
-}
+})
 
+export default TablaEnvios

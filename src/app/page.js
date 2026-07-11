@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/app/lib/supabase'
 import RegistroEnvioForm from './components/RegistroEnvioForm'
 import TablaEnvios from './components/TablaEnvios'
@@ -11,7 +11,8 @@ import Bienvenida from './components/Bienvenida'
 export default function Page() {
   const [user, setUser] = useState(null)
   const [mostrarRegistro, setMostrarRegistro] = useState(false)
-  const [refresh, setRefresh] = useState(false)
+  const [refresh, setRefresh] = useState(false) 
+  const tablaRef = useRef(null)
 
   /* ---------- Verificar sesión ---------- */
   useEffect(() => {
@@ -98,13 +99,16 @@ export default function Page() {
       <Bienvenida />
 
       {/* FORMULARIO */}
-      <RegistroEnvioForm
-        onSave={() => setRefresh((r) => !r)}
-        modo="lineal"
-      />
+<RegistroEnvioForm
+  tablaRef={tablaRef}
+  modo="lineal"
+/>
 
       {/* TABLA */}
-      <TablaEnvios refresh={refresh} />
+     <TablaEnvios
+    ref={tablaRef}
+    refresh={refresh}
+/>
 
     </main>
   )
