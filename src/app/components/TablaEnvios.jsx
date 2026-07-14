@@ -126,8 +126,10 @@ if (!navegadorId.current) {
   const [loading, setLoading] = useState(true)
   const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [paginaActual, setPaginaActual] = useState(1)
-  const [modalOpen, setModalOpen] = useState(false) 
-  const [actualizandoCheck, setActualizandoCheck] = useState({}) 
+  const [modalOpen, setModalOpen] = useState(false)   
+  const [modoFormulario, setModoFormulario] = useState('editar')
+  const [actualizandoCheck, setActualizandoCheck] = useState({})  
+ 
  
 
 const ITEMS_POR_PAGINA = 45
@@ -806,7 +808,9 @@ const marcarDescripcionRevisada = async (id) => {
   }
 
   /* ---------- MODAL ---------- */
-  const abrirEditarEnvio = (envio) => {
+  const abrirEditarEnvio = (envio) => { 
+
+    setModoFormulario('editar')
     setOriginalDelModal(envio ? { ...envio } : null)
     setEditandoDesdeModal(!!envio)
     setEnvioEditando(envio ? { ...envio } : null)
@@ -818,7 +822,30 @@ const marcarDescripcionRevisada = async (id) => {
     setEnvioEditando(null)
     setOriginalDelModal(null)
     setEditandoDesdeModal(false)
-  }  
+  }   
+
+const duplicarEnvio = () => {
+
+  if (!envioEditando) return
+
+  setModoFormulario('duplicar')
+
+  setEnvioEditando({
+    ...envioEditando,
+
+    id: undefined,
+    created_at: undefined,
+    updated_at: undefined,
+
+    completado: false,
+
+    descripcion_editada: false,
+    descripcion_editada_at: null,
+
+    origen_navegador: undefined
+  })
+
+}
 
 
 const actualizarEnvioLocal = (envioActualizado) => {
@@ -1330,12 +1357,18 @@ const hayFiltros =
       <Modal
         isOpen={modalOpen}
         onClose={cerrarModal}
-        title={envioEditando ? "Editar Envío" : "Crear Envío"}
+        title={
+  modoFormulario === 'duplicar'
+    ? '📄 Crear copia de envío'
+    : 'Editar Envío'
+}
       >
-        <RegistroEnvioForm
+      <RegistroEnvioForm
   tablaRef={ref}
   initialData={envioEditando}
+  modoFormulario={modoFormulario}
   onCancel={cerrarModal}
+  onDuplicar={duplicarEnvio}
   modo="columnas"
 />
       </Modal>

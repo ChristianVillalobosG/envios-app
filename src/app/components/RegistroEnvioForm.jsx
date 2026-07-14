@@ -5,11 +5,16 @@ import { supabase } from '@/app/lib/supabase'
 import { toast } from 'sonner'
 
 export default function RegistroEnvioForm({
-  tablaRef,
-  onCancel,
-  initialData,
-  modo
+
+    tablaRef,
+    onCancel,
+    onDuplicar,
+    initialData,
+    modoFormulario,
+    modo
+
 }) {
+
   const mensajeros = [
     'Jose',
     'Gary',
@@ -137,7 +142,12 @@ const handleChange = (e) => {
   /* ---------- GUARDAR ---------- */
   const handleGuardar = async (tipo) => {
     try {
-      setCargando(true)
+      setCargando(true) 
+
+      const esDuplicado = modoFormulario === 'duplicar' 
+
+      const actualizar =
+  tipo === 'actualizar' && !esDuplicado
 
       if (!form.cliente || !form.fecha) {
         toast.error('Completa cliente y fecha')
@@ -184,7 +194,7 @@ console.log('ENVIO DATA:', envioData)
 
     
      /* ---------- ACTUALIZAR ---------- */
-if (tipo === 'actualizar' && initialData?.id) {
+if (actualizar && initialData?.id) { 
 
   const descripcionCambio =
     (initialData.descripcion || '').trim() !==
@@ -229,9 +239,17 @@ toast.success('✔️ Envío actualizado')
 tablaRef.current?.actualizarEnvioLocal(data)
 onCancel?.()
 
-return
+return 
+
 }
-      /* ---------- CREAR ---------- */
+      /* ---------- CREAR ---------- */ 
+
+      console.log('CREANDO ENVÍO:', {
+  tipo,
+  actualizar,
+  esDuplicado,
+  envioData
+})
  const { data, error } = await supabase
   .from('envios')
 .insert([
@@ -401,37 +419,69 @@ return
       />
 
       {/* BOTONES */}
-      <div className="flex items-center gap-4">
-        {initialData ? (
-          <button
-            type="button"
-            disabled={cargando}
-            onClick={() => handleGuardar('actualizar')}
-            className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {cargando ? 'Actualizando...' : 'Actualizar'}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={cargando}
-            onClick={() => handleGuardar('crear')}
-            className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white"
-          >
-            {cargando ? 'Guardando...' : 'Crear'}
-          </button>
-        )}
+     <div className="flex items-center gap-4">
 
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded"
-          >
-            Cancelar
-          </button>
-        )}
-      </div>
+{initialData ? (
+
+  modoFormulario === 'duplicar' ? (
+
+    <button
+      type="button"
+      disabled={cargando}
+      onClick={() => handleGuardar('crear')}
+      className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white"
+    >
+      {cargando ? 'Guardando...' : 'Crear'}
+    </button>
+
+  ) : (
+
+    <>
+      <button
+        type="button"
+        disabled={cargando}
+        onClick={() => handleGuardar('actualizar')}
+        className="px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
+      >
+        {cargando ? 'Actualizando...' : 'Actualizar'}
+      </button>
+
+      <button
+        type="button"
+        disabled={cargando}
+        onClick={onDuplicar}
+        className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
+      >
+        Crear copia
+      </button>
+    </>
+
+  )
+
+) : (
+
+  <button
+    type="button"
+    disabled={cargando}
+    onClick={() => handleGuardar('crear')}
+    className="px-4 py-2 rounded-full bg-green-600 hover:bg-green-700 text-white"
+  >
+    {cargando ? 'Guardando...' : 'Crear'}
+  </button>
+
+)}
+
+  {onCancel && (
+    <button
+      type="button"
+      onClick={onCancel}
+      className="px-4 py-2 bg-zinc-400 hover:bg-zinc-500 text-white rounded"
+    >
+      Cancelar
+    </button>
+  )}
+
+</div>
     </form>
   )
-}
+} 
