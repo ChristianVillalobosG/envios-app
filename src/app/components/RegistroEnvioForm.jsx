@@ -42,7 +42,9 @@ export default function RegistroEnvioForm({
     mensajero: '',
     estado: 'En la mañana',
     fecha: obtenerFechaHoy(), 
-    es_impresora: false
+    es_impresora: false, 
+    es_whatsapp: false, 
+    facturado: false
   }
 
   const [form, setForm] = useState(formInicial)
@@ -61,7 +63,8 @@ export default function RegistroEnvioForm({
         mensajero: initialData.mensajero ?? '',
         estado: initialData.estado ?? 'En la mañana',
         fecha: initialData.fecha ?? obtenerFechaHoy(), 
-        es_impresora: initialData.es_impresora || false
+        es_impresora: initialData.es_impresora || false, 
+        es_whatsapp: initialData.es_whatsapp || false
       })
     } else {
       setForm({ ...formInicial })
@@ -340,7 +343,8 @@ return
         className="min-w-[180px] px-3 py-2 border rounded"
       />
 
-     <div className="flex flex-col min-w-[180px] pt-6">
+     <div className="flex flex-col min-w-[220px] pt-7">
+
   <input
     type="text"
     name="descripcion"
@@ -350,23 +354,40 @@ return
     className="px-3 py-2 border rounded"
   />
 
- <label className="mt-1 flex items-center gap-2 text-sm cursor-pointer">
-    <input
-      type="checkbox"
-      checked={form.es_impresora}
-      onChange={(e) =>
-        setForm({
-          ...form,
-          es_impresora: e.target.checked
-        })
-      }
-      className="h-4 w-4"
-    />
+  <div className="mt-2 flex items-center gap-6">
 
-    <span className="text-sm">
-      Impresora
-    </span>
-  </label>
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={form.es_impresora}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            es_impresora: e.target.checked
+          })
+        }
+      />
+
+      <span className="text-sm">Impresora</span>
+    </label>
+
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={form.es_whatsapp}
+        onChange={(e) =>
+          setForm({
+            ...form,
+            es_whatsapp: e.target.checked
+          })
+        }
+      />
+
+      <span className="text-sm">WhatsApp</span>
+    </label>
+
+  </div>
+
 </div>
 
 

@@ -2,7 +2,7 @@
 
 
 import { supabase } from '@/app/lib/supabase'
-import { Pencil, Trash2, Check, Copy } from 'lucide-react'
+import { Pencil, Trash2, Check, Copy, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import dayjs from 'dayjs'
 import RegistroEnvioForm from './RegistroEnvioForm'
@@ -17,7 +17,8 @@ import {
   forwardRef,
   useImperativeHandle
 } from 'react'
-import { FaPrint } from 'react-icons/fa6'
+import { FaPrint } from 'react-icons/fa6' 
+import { FaWhatsapp } from "react-icons/fa"
 
 /* ---------- Modal ---------- */
 function Modal({ isOpen, onClose, title, children }) {
@@ -114,10 +115,12 @@ if (!navegadorId.current) {
 }
 
   const [envios, setEnvios] = useState([]) 
-  const [busqueda, setBusqueda] = useState('')
-  const [fechaFiltro, setFechaFiltro] = useState('')
-  const [estadoFiltro, setEstadoFiltro] = useState('')
-  const [mensajeroFiltro, setMensajeroFiltro] = useState('')
+ const [busqueda, setBusqueda] = useState('')
+const [fechaDesde, setFechaDesde] = useState('')
+const [fechaHasta, setFechaHasta] = useState('')
+const [estadoFiltro, setEstadoFiltro] = useState('')
+const [mensajeroFiltro, setMensajeroFiltro] = useState('')
+const [tipoFiltro, setTipoFiltro] = useState('')
   const [actualizados, setActualizados] = useState({})
   const [envioEditando, setEnvioEditando] = useState(null)
   const [originalDelModal, setOriginalDelModal] = useState(null)
@@ -128,7 +131,8 @@ if (!navegadorId.current) {
   const [paginaActual, setPaginaActual] = useState(1)
   const [modalOpen, setModalOpen] = useState(false)   
   const [modoFormulario, setModoFormulario] = useState('editar')
-  const [actualizandoCheck, setActualizandoCheck] = useState({})  
+  const [actualizandoCheck, setActualizandoCheck] = useState({})   
+  const [actualizandoFacturado, setActualizandoFacturado] = useState({})
  
  
 
@@ -321,7 +325,35 @@ actualizarEnvioLocal(payload.new)
   }
 
   return
+} 
+
+
+// FACTURADO
+if (
+  payload.eventType === 'UPDATE' &&
+  payload.new?.facturado !==
+    payload.old?.facturado
+) {
+
+  actualizarEnvioLocal(payload.new)
+
+  if (!esMiEvento) {
+
+    toast.success(
+
+      payload.new.facturado
+
+        ? '🧾 Pedido facturado'
+
+        : '↩ Factura removida'
+
+    )
+
+  }
+
+  return
 }
+
  // DESCRIPCIÓN REVISADA
 if (
   payload.eventType === 'UPDATE' &&
@@ -406,7 +438,28 @@ const intervalo = setInterval(() => {
     )
     supabase.removeChannel(canal)
   }
-}, [])
+}, []) 
+
+
+
+const hayFiltros =
+  busqueda.trim() !== '' ||
+  fechaDesde !== '' ||
+  fechaHasta !== '' ||
+  estadoFiltro !== '' ||
+  mensajeroFiltro !== '' ||
+  tipoFiltro !== ''
+
+const limpiarFiltros = () => {
+
+  setBusqueda('')
+  setFechaDesde('')
+  setFechaHasta('')
+  setEstadoFiltro('')
+  setMensajeroFiltro('')
+  setTipoFiltro('')
+
+}
 
   /* ---------- FILTRADO ---------- */
 const enviosFiltradosOrdenados = useMemo(() => {
@@ -425,12 +478,19 @@ const enviosFiltradosOrdenados = useMemo(() => {
     )
   }
 
-  // FECHA
-  if (fechaFiltro) {
-    datos = datos.filter(
-      (e) => e.fecha === fechaFiltro
-    )
-  }
+  // DESDE
+if (fechaDesde) {
+  datos = datos.filter(
+    (e) => e.fecha >= fechaDesde
+  )
+} 
+
+// HASTA
+if (fechaHasta) {
+  datos = datos.filter(
+    (e) => e.fecha <= fechaHasta
+  )
+}
 
   // MENSAJERO
   if (mensajeroFiltro) {
@@ -450,6 +510,36 @@ const enviosFiltradosOrdenados = useMemo(() => {
         estadoNorm
     )
   }
+
+// TIPO
+if (tipoFiltro) {
+
+  datos = datos.filter((e) => {
+
+    switch (tipoFiltro) {
+
+      case 'pagina':
+        return (
+          !e.es_impresora &&
+          !e.es_whatsapp
+        )
+
+      case 'impresora':
+        return e.es_impresora
+
+      case 'whatsapp':
+        return e.es_whatsapp
+
+      default:
+        return true
+
+    }
+
+  })
+
+} 
+
+
 
   // FECHAS DE REFERENCIA
   const hoy = new Date()
@@ -563,9 +653,11 @@ const enviosFiltradosOrdenados = useMemo(() => {
 }, [
   envios,
   busqueda,
-  fechaFiltro,
+  fechaDesde,
+  fechaHasta,
+  estadoFiltro,
   mensajeroFiltro,
-  estadoFiltro
+  tipoFiltro
 ])
 
   const totalPaginas = Math.ceil(
@@ -577,9 +669,16 @@ const enviosFiltradosOrdenados = useMemo(() => {
     paginaActual * ITEMS_POR_PAGINA
   )
 
-  useEffect(() => {
-    setPaginaActual(1)
-  }, [busqueda, fechaFiltro, estadoFiltro, mensajeroFiltro]) 
+ useEffect(() => {
+  setPaginaActual(1)
+}, [
+  busqueda,
+  fechaDesde,
+  fechaHasta,
+  estadoFiltro,
+  mensajeroFiltro,
+  tipoFiltro
+]) 
 
   useEffect(() => {
   if (
@@ -588,7 +687,7 @@ const enviosFiltradosOrdenados = useMemo(() => {
   ) {
     setPaginaActual(totalPaginas)
   }
-}, [paginaActual, totalPaginas]) 
+}, [paginaActual, totalPaginas])   
 
 
   /* ---------- CAMBIAR ESTADO ---------- */
@@ -764,7 +863,66 @@ if (envioActual) {
       [id]: false
     }))
   }
+} 
+
+
+/* ---------- TOGGLE FACTURADO ---------- */ 
+const toggleFacturado = async (id, facturadoActual) => {
+
+  const nuevoEstado = !facturadoActual
+
+  // Actualización inmediata de la tabla
+  const envioActual = envios.find(e => e.id === id)
+
+  if (envioActual) {
+    guardarEnvioLocal({
+      ...envioActual,
+      facturado: nuevoEstado
+    })
+  }
+
+  try {
+
+    const { error } = await supabase
+      .from('envios')
+      .update({
+        facturado: nuevoEstado,
+        updated_at: new Date().toISOString(),
+        origen_navegador:
+          sessionStorage.getItem('navegador_id')
+      })
+      .eq('id', id)
+
+    if (error) {
+
+      // Restaurar si ocurrió un error
+      if (envioActual) {
+        guardarEnvioLocal(envioActual)
+      }
+
+      toast.error(error.message)
+      return
+    }
+
+    toast.success(
+      nuevoEstado
+        ? '🧾 Pedido facturado'
+        : '↩ Factura removida'
+    )
+
+  } catch (err) {
+
+    console.error(err)
+
+    if (envioActual) {
+      guardarEnvioLocal(envioActual)
+    }
+
+    toast.error('Error inesperado')
+  }
+
 }
+
 
 /* ---------- DESCRIPCIÓN REVISADA ---------- */
 const marcarDescripcionRevisada = async (id) => {
@@ -1001,57 +1159,146 @@ Notas: *${e.notas || '-'}*\n\n`
   }
 
 
-const hayFiltros =
-  busqueda.trim() !== '' ||
-  fechaFiltro !== '' ||
-  estadoFiltro !== '' ||
-  mensajeroFiltro !== ''
-
-
     return (
     <div className="mt-8 overflow-x-auto rounded-xl shadow-lg bg-white text-zinc-900 font-sans">
 
-      {/* FILTROS */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between px-6 py-4 border-b border-gray-300">
+{/* FILTROS */}
+<div className="flex flex-wrap items-end gap-4 px-6 py-4 border-b border-gray-300">
 
-        <input
-          type="text"
-          placeholder="Buscar..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="w-full md:max-w-xs px-4 py-2 rounded-md border border-gray-300"
-        />
+  {/* Buscar */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Buscar
+    </label>
 
-        <input
-          type="date"
-          value={fechaFiltro}
-          onChange={(e) => setFechaFiltro(e.target.value)}
-          className="px-4 py-2 rounded-md border border-gray-300"
-        />
+    <input
+      type="text"
+      placeholder="Cliente, teléfono, descripción..."
+      value={busqueda}
+      onChange={(e) => setBusqueda(e.target.value)}
+      className="w-72 px-4 py-2 rounded-md border border-gray-300"
+    />
+  </div>
 
-        <select
-          value={estadoFiltro}
-          onChange={(e) => setEstadoFiltro(e.target.value)}
-          className="px-4 py-2 rounded-md border border-gray-300"
+  {/* Desde */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Desde
+    </label>
+
+    <input
+      type="date"
+      value={fechaDesde}
+      onChange={(e) => setFechaDesde(e.target.value)}
+      className="px-4 py-2 rounded-md border border-gray-300"
+    />
+  </div>
+
+  {/* Hasta */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Hasta
+    </label>
+
+    <input
+      type="date"
+      value={fechaHasta}
+      onChange={(e) => setFechaHasta(e.target.value)}
+      className="px-4 py-2 rounded-md border border-gray-300"
+    />
+  </div>
+
+  {/* Estado */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Estado
+    </label>
+
+    <select
+      value={estadoFiltro}
+      onChange={(e) => setEstadoFiltro(e.target.value)}
+      className="w-44 px-4 py-2 rounded-md border border-gray-300"
+    >
+      <option value="">Todos</option>
+      <option value="En la mañana">En la mañana</option>
+      <option value="En la tarde">En la tarde</option>
+      <option value="Mañana">Mañana</option>
+    </select>
+  </div>
+
+  {/* Mensajero */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Mensajero
+    </label>
+
+    <select
+      value={mensajeroFiltro}
+      onChange={(e) => setMensajeroFiltro(e.target.value)}
+      className="w-44 px-4 py-2 rounded-md border border-gray-300"
+    >
+      <option value="">Todos</option>
+
+      {[
+        'Jose',
+        'Gary',
+        'Jeremy',
+        'Chris',
+        'Uber',
+        'Andres',
+        'Otro'
+      ].map(m => (
+
+        <option
+          key={m}
+          value={m}
         >
-          <option value="">Todos los estados</option>
-          <option value="En la mañana">En la mañana</option>
-          <option value="En la tarde">En la tarde</option>
-          <option value="Mañana">Mañana</option>
-        </select>
+          {m}
+        </option>
 
-        <select
-          value={mensajeroFiltro}
-          onChange={(e) => setMensajeroFiltro(e.target.value)}
-          className="px-4 py-2 rounded-md border border-gray-300"
-        >
-          <option value="">Todos los mensajeros</option>
-          {['Jose','Gary','Jeremy','Chris','Uber','Andres','Otro'].map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
+      ))}
 
-      </div>
+    </select>
+  </div>
+
+  {/* Tipo */}
+  <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Tipo
+    </label>
+
+    <select
+      value={tipoFiltro}
+      onChange={(e) => setTipoFiltro(e.target.value)}
+      className="w-44 px-4 py-2 rounded-md border border-gray-300"
+    >
+      <option value="">Todos</option>
+      <option value="pagina">📦 Página</option>
+      <option value="impresora">🖨 Impresora</option>
+      <option value="whatsapp">💬 WhatsApp</option>
+    </select>
+  </div> 
+
+  {hayFiltros && (
+
+  <div className="flex flex-col">
+
+    <label className="text-xs text-transparent mb-1">
+      Acción
+    </label>
+
+    <button
+      onClick={limpiarFiltros}
+      className="px-4 py-2 rounded-md bg-gray-200 hover:bg-red-500 hover:text-white transition-colors"
+    >
+      🧹 Limpiar filtros
+    </button>
+
+  </div>
+
+)}
+
+</div>
 
       {/* BOTONES SUPERIORES */}
       <div className="flex flex-wrap justify-end gap-3 px-6 py-3 border-b border-gray-300"> 
@@ -1122,15 +1369,15 @@ const hayFiltros =
           ) : enviosPagina.map((envio) => (
           <tr
   key={envio.id}
-  className={`border-b align-top transition-colors ${
-    actualizados[envio.id]
-      ? actualizados[envio.id] === 'fijo'
-        ? 'bg-yellow-300'
-        : `bg-yellow-300 ${animacionesListas ? 'animate-pulse' : ''}`
-      : envio.es_impresora
-        ? 'bg-blue-50 hover:bg-blue-100'
-        : 'bg-white hover:bg-gray-100'
-  }`}
+ className={`border-b align-top transition-colors ${
+  envio.es_whatsapp
+    ? envio.facturado
+      ? 'bg-fuchsia-100 hover:bg-fuchsia-200'
+      : 'bg-pink-50 hover:bg-pink-100'
+    : envio.es_impresora
+      ? 'bg-blue-50 hover:bg-blue-100'
+      : 'bg-white hover:bg-gray-100'
+}`}
 >
               <td className="p-3 break-words max-w-[180px]">
   <div className="flex items-center gap-2">
@@ -1140,7 +1387,16 @@ const hayFiltros =
         className="text-blue-600 flex-shrink-0"
         title="Impresora 3D"
       />
+    )} 
+
+    {envio.es_whatsapp && (
+      <FaWhatsapp 
+      size={20}
+        className="text-green-600"
+        title="Pedido WhatsApp"
+      />
     )}
+
 
     <span>{envio.cliente}</span>
   </div>
@@ -1213,77 +1469,124 @@ const hayFiltros =
               </td>
 
               {/* ESTADO Y COMPLETADO */}
-              <td className="p-3 align-top">
-                <div className="flex flex-col gap-1">
+       <td className="p-3">
 
-                  {/* SELECT DE ESTADO + COMPLETADO */}
-                  <div className="flex items-center justify-between gap-2">
+  <div className="flex items-center justify-center gap-6">
 
-                    <select
-                      value={envio.estado ?? ''}
-                      onChange={(e) => cambiarEstado(envio.id, e.target.value)}
-                      className={`px-2 py-1 rounded text-xs font-semibold w-fit
-                        ${
-                          envio.estado === 'En la mañana'
-                            ? 'bg-green-200 text-green-800'
-                            : envio.estado === 'En la tarde'
-                            ? 'bg-yellow-200 text-yellow-800'
-                            : 'bg-blue-200 text-blue-800'
-                        }
-                      `}
-                    >
-                      <option>En la mañana</option>
-                      <option>En la tarde</option>
-                      <option>Mañana</option>
-                    </select>
-
-                    {/* BOTÓN COMPLETADO */}
-          {/* BOTÓN COMPLETADO */}
-<button
-  disabled={actualizandoCheck[envio.id]}
-  onClick={() =>
-    toggleCompletado(
+    {/* ESTADO */}
+   <select
+  value={envio.estado}
+  onChange={(e) =>
+    cambiarEstado(
       envio.id,
-      envio.completado
-    ) 
-  } 
-
-
-
-  
-
+      e.target.value
+    )
+  }
   className={`
-    flex items-center justify-center
-    w-7 h-7 min-w-[28px] min-h-[28px]
-    rounded-full border transition-colors
+    px-2 py-1 rounded text-xs font-semibold w-fit
     ${
-      envio.completado
-        ? 'bg-green-600 text-white border-green-600'
-        : 'bg-white text-gray-500 border-gray-400'
+      envio.estado === 'En la mañana'
+        ? 'bg-green-200 text-green-800'
+        : envio.estado === 'En la tarde'
+        ? 'bg-yellow-200 text-yellow-800'
+        : 'bg-blue-200 text-blue-800'
     }
   `}
 >
-  <Check size={14} strokeWidth={3} />
-</button> 
+  <option>En la mañana</option>
+  <option>En la tarde</option>
+  <option>Mañana</option>
+</select>
 
+{/* CONTENEDOR DE TOGGLES */}
+<div className="flex items-center gap-4 w-[75px] justify-start">
 
+  {/* COMPLETADO */}
 
-                  </div>
-                </div>
+  <button
+    disabled={actualizandoCheck[envio.id]}
+    onClick={() =>
+      toggleCompletado(
+        envio.id,
+        envio.completado
+      )
+    }
 
-                {/* ANIMACIÓN */}
-                <style jsx>{`
-                  @keyframes typing {
-                    from { width: 0 }
-                    to { width: 100% }
-                  }
-                  .animate-typing {
-                    display: inline-block;
-                    width: 0;
-                    animation: typing 1.2s steps(12, end) forwards;
-                  }
-                `}</style>
-              </td>
+    className={`
+      flex items-center justify-center
+
+      w-8 h-8
+      min-w-[32px]
+      min-h-[32px]
+
+      rounded-full
+      border
+      transition-colors
+
+      ${
+        envio.completado
+          ? 'bg-green-600 text-white border-green-600'
+          : 'bg-white text-gray-500 border-gray-400'
+      }
+    `}
+  >
+
+    <Check
+      size={16}
+      strokeWidth={3}
+    />
+
+  </button>
+
+  {/* FACTURADO */}
+
+  {envio.es_whatsapp && (
+
+    <button
+      disabled={actualizandoFacturado[envio.id]}
+      onClick={() =>
+        toggleFacturado(
+          envio.id,
+          envio.facturado
+        )
+      }
+
+      title={
+        envio.facturado
+          ? 'Factura realizada'
+          : 'Marcar como facturado'
+      }
+
+      className={`
+        flex items-center justify-center
+
+        w-8 h-8
+        min-w-[32px]
+        min-h-[32px]
+
+        rounded-full
+        border
+        transition-colors
+
+        ${
+          envio.facturado
+  ? 'bg-fuchsia-600 text-white border-fuchsia-600'
+  : 'bg-white text-gray-500 border-gray-400 hover:bg-gray-50'
+        }
+      `}
+    >
+
+      <Receipt
+    size={15}
+    strokeWidth={2.8}
+/>
+    </button>
+
+  )}
+
+</div>
+</div>
+</td>
 
               {/* FECHA */}
               <td className="p-3">{formatearFecha(envio.fecha)}</td>
