@@ -189,7 +189,7 @@ const { data, error } = await query
   .order('created_at', {
     ascending: false
   })
-  .limit(200)
+ 
 
     if (grupoError && grupoError.code !== 'PGRST116') {
       console.error(grupoError)
@@ -1215,7 +1215,7 @@ Notas: *${e.notas || '-'}*\n\n`
     </label>
 
     <select
-      value={estadoFiltro}
+      value={estadoFiltro ?? ''}
       onChange={(e) => setEstadoFiltro(e.target.value)}
       className="w-44 px-4 py-2 rounded-md border border-gray-300"
     >
@@ -1233,7 +1233,7 @@ Notas: *${e.notas || '-'}*\n\n`
     </label>
 
     <select
-      value={mensajeroFiltro}
+      value={mensajeroFiltro ?? ''}
       onChange={(e) => setMensajeroFiltro(e.target.value)}
       className="w-44 px-4 py-2 rounded-md border border-gray-300"
     >
@@ -1268,7 +1268,7 @@ Notas: *${e.notas || '-'}*\n\n`
     </label>
 
     <select
-      value={tipoFiltro}
+      value={tipoFiltro ?? ''}
       onChange={(e) => setTipoFiltro(e.target.value)}
       className="w-44 px-4 py-2 rounded-md border border-gray-300"
     >
@@ -1457,7 +1457,7 @@ Notas: *${e.notas || '-'}*\n\n`
               {/* MENSAJERO */}
               <td className="p-3">
                 <select
-                  value={envio.mensajero || ''}
+                  value={envio.mensajero ?? ''}
                   onChange={(e) => cambiarMensajero(envio.id, e.target.value)}
                   className="border rounded px-2 py-1"
                 >
@@ -1475,7 +1475,7 @@ Notas: *${e.notas || '-'}*\n\n`
 
     {/* ESTADO */}
    <select
-  value={envio.estado}
+  value={envio.estado ?? ''}
   onChange={(e) =>
     cambiarEstado(
       envio.id,
