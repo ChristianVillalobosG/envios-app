@@ -926,30 +926,52 @@ const toggleFacturado = async (id, facturadoActual) => {
 
 /* ---------- DESCRIPCIÓN REVISADA ---------- */
 const marcarDescripcionRevisada = async (id) => {
+
+  // Buscar el envío actual
+  const envioActual = envios.find(e => e.id === id)
+
+  if (!envioActual) return
+
+  // Actualización inmediata en la tabla
+  actualizarEnvioLocal({
+    ...envioActual,
+    descripcion_editada: false
+  })
+
   try {
+
     const { error } = await supabase
       .from('envios')
       .update({
-        descripcion_editada: false, 
+        descripcion_editada: false,
         origen_navegador:
-  sessionStorage.getItem('navegador_id')
+          sessionStorage.getItem('navegador_id')
       })
       .eq('id', id)
 
     if (error) {
+
+      // Restaurar si hubo error
+      actualizarEnvioLocal(envioActual)
+
       toast.error(error.message)
       return
     }
 
     toast.success('✓ Cambio revisado')
 
-
-
   } catch (err) {
+
     console.error(err)
+
+    // Restaurar si hubo error
+    actualizarEnvioLocal(envioActual)
+
     toast.error('Error al marcar como revisado')
   }
-}
+
+} 
+
   /* ---------- FECHA ---------- */
   const formatearFecha = (fecha) => {
     const d = dayjs(fecha)
@@ -991,7 +1013,7 @@ const duplicarEnvio = () => {
   setEnvioEditando({
     ...envioEditando,
 
-    id: undefined,
+    id: null,
     created_at: undefined,
     updated_at: undefined,
 
@@ -1034,8 +1056,8 @@ const guardarEnvioLocal = (envio) => {
     
     return [
       envio,
-      ...prev
-    ].slice(0, 200)
+      ...prev.filter(e => e.id !== envio.id)
+    ]
 
   })
 

@@ -33,6 +33,7 @@ export default function RegistroEnvioForm({
   }
 
   const formInicial = {
+    id: null,
     cliente: '',
     provincia: '',
     telefono: '',
@@ -53,7 +54,8 @@ export default function RegistroEnvioForm({
   /* ---------- CARGAR DATOS ---------- */
   useEffect(() => {
     if (initialData) {
-      setForm({
+      setForm({ 
+        id: initialData.id ?? null,
         cliente: initialData.cliente ?? '',
         provincia: initialData.provincia ?? '',
         telefono: initialData.telefono ?? '',
@@ -182,14 +184,15 @@ if (grupoUsuario?.grupo_id) {
   grupoId = grupoUsuario.grupo_id
 }
 
+const { id, ...formSinId } = form
+
 const envioData = {
-  ...form,
+  ...formSinId,
   user_id: user.id,
-  grupo_id: grupoId, 
+  grupo_id: grupoId,
   origen_navegador:
     sessionStorage.getItem('navegador_id')
 }
-
 
 console.log('USER ID:', user.id)
 console.log('SESSION:', session)
@@ -197,7 +200,7 @@ console.log('ENVIO DATA:', envioData)
 
     
      /* ---------- ACTUALIZAR ---------- */
-if (actualizar && initialData?.id) { 
+if (actualizar && form.id) {
 
   const descripcionCambio =
     (initialData.descripcion || '').trim() !==
@@ -223,7 +226,7 @@ const { data, error } = await supabase
 
     updated_at: new Date().toISOString()
   })
-  .eq('id', initialData.id)
+.eq('id', form.id)
   .select()
   .single()
 
