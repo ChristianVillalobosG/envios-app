@@ -75,6 +75,7 @@ export default function RegistroEnvioForm({
 
   /* ---------- HANDLE CHANGE ---------- */
 const handleChange = (e) => {
+
   const { name, value } = e.target
 
   const hoy = new Date()
@@ -83,67 +84,87 @@ const handleChange = (e) => {
     hoy.getTime() - hoy.getTimezoneOffset() * 60000
   )
 
-  const hoyStr = hoyLocal.toISOString().split('T')[0]
+  const hoyStr =
+    hoyLocal.toISOString().split('T')[0]
 
   const manana = new Date(hoyLocal)
 
-  manana.setDate(manana.getDate() + 1)
+  manana.setDate(
+    manana.getDate() + 1
+  )
 
-  const mananaStr = manana.toISOString().split('T')[0]
+  const mananaStr =
+    manana.toISOString().split('T')[0] 
 
-  /* ---------- CAMBIO DE ESTADO ---------- */
-  if (name === 'estado') {
-    let nuevaFecha
+  
 
-    if (value === 'Mañana') {
-      nuevaFecha = mananaStr
-    } else {
-      nuevaFecha = hoyStr
-    }
+/* ---------- CAMBIO DE ESTADO ---------- */
+if (name === 'estado') {
 
+  // Hoy en la mañana
+  if (value === 'En la mañana') {
     setForm((prev) => ({
       ...prev,
       estado: value,
-      fecha: nuevaFecha
+      fecha: hoyStr
     }))
 
     return
   }
 
-  /* ---------- CAMBIO DE FECHA ---------- */
-  if (name === 'fecha') {
-    let nuevoEstado = form.estado
-
-    // Si fecha es mañana → estado Mañana
-    if (value === mananaStr) {
-      nuevoEstado = 'Mañana'
-    }
-
-    // Si fecha es hoy o anterior → En la mañana
-    else if (value <= hoyStr) {
-      nuevoEstado = 'En la mañana'
-    }
-
-    // Si fecha es futura → En la mañana
-    else {
-      nuevoEstado = 'En la mañana'
-    }
-
+  // Hoy en la tarde
+  if (value === 'En la tarde') {
     setForm((prev) => ({
       ...prev,
-      fecha: value,
-      estado: nuevoEstado
+      estado: value,
+      fecha: hoyStr
     }))
 
     return
   }
 
+  // Mañana en la mañana
+  if (value === 'Mañana en la mañana') {
+    setForm((prev) => ({
+      ...prev,
+      estado: value,
+      fecha: mananaStr
+    }))
+
+    return
+  }
+
+  // Mañana en la tarde
+  if (value === 'Mañana en la tarde') {
+    setForm((prev) => ({
+      ...prev,
+      estado: value,
+      fecha: mananaStr
+    }))
+
+    return
+  }
+
+  // Otra fecha
+  if (value === 'Otra fecha') {
+    setForm((prev) => ({
+      ...prev,
+      estado: value
+    }))
+
+    return
+  }
+
+}
+
   /* ---------- OTROS CAMPOS ---------- */
-  setForm((prev) => ({
+
+  setForm(prev => ({
     ...prev,
     [name]: value
   }))
 }
+
   /* ---------- GUARDAR ---------- */
   const handleGuardar = async (tipo) => {
     try {
@@ -184,12 +205,70 @@ if (grupoUsuario?.grupo_id) {
   grupoId = grupoUsuario.grupo_id
 }
 
+
+
+// ---------- CALCULAR FECHA SEGÚN ESTADO ----------
+let fechaGuardar = form.fecha
+
+const hoy = new Date()
+
+const hoyLocal = new Date(
+  hoy.getTime() -
+  hoy.getTimezoneOffset() * 60000
+)
+
+const hoyStr = hoyLocal
+  .toISOString()
+  .split('T')[0]
+
+
+// ---------- MAÑANA ----------
+if (
+  form.estado === 'Mañana en la mañana' ||
+  form.estado === 'Mañana en la tarde'
+) {
+
+  const manana = new Date(hoyLocal)
+
+  manana.setDate(
+    manana.getDate() + 1
+  )
+
+  fechaGuardar = manana
+    .toISOString()
+    .split('T')[0]
+}
+
+
+// ---------- EN LA MAÑANA / EN LA TARDE ----------
+else if (
+  form.estado === 'En la mañana' ||
+  form.estado === 'En la tarde'
+) {
+
+  fechaGuardar = hoyStr
+}
+
+
+// ---------- OTRA FECHA ----------
+else if (form.estado === 'Otra fecha') {
+
+  // Mantener exactamente la fecha
+  // seleccionada por el usuario
+  fechaGuardar = form.fecha
+}
+
+
 const { id, ...formSinId } = form
 
 const envioData = {
   ...formSinId,
+
+  fecha: fechaGuardar,
+
   user_id: user.id,
   grupo_id: grupoId,
+
   origen_navegador:
     sessionStorage.getItem('navegador_id')
 }
@@ -427,20 +506,40 @@ return
         onChange={handleChange}
         className="min-w-[130px] px-3 py-2 border rounded"
       >
-        <option>En la mañana</option>
-        <option>En la tarde</option>
-        <option>Mañana</option>
+        <option value="En la mañana">
+  En la mañana
+</option>
+
+<option value="En la tarde">
+  En la tarde
+</option>
+
+<option value="Mañana en la mañana">
+  Mañana en la mañana
+</option>
+
+<option value="Mañana en la tarde">
+  Mañana en la tarde
+</option> 
+
+<option value="Otra fecha">
+  Otra fecha
+</option>
       </select>
 
       {/* FECHA */}
-      <input
-        type="date"
-        name="fecha"
-        value={form.fecha}
-        onChange={handleChange}
-        className="min-w-[130px] px-3 py-2 border rounded"
-        required
-      />
+<input
+  type="date"
+  name="fecha"
+  value={form.fecha || ''}
+  onChange={handleChange}
+  disabled={form.estado !== 'Otra fecha'}
+  className={`px-3 py-2 rounded-md border ${
+    form.estado === 'Otra fecha'
+      ? 'bg-white border-gray-300'
+      : 'bg-gray-100 border-gray-200 text-gray-500'
+  }`}
+ />
 
       {/* BOTONES */}
      <div className="flex items-center gap-4">

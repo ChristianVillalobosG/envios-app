@@ -118,7 +118,8 @@ if (!navegadorId.current) {
  const [busqueda, setBusqueda] = useState('')
 const [fechaDesde, setFechaDesde] = useState('')
 const [fechaHasta, setFechaHasta] = useState('')
-const [estadoFiltro, setEstadoFiltro] = useState('')
+const [estadoFiltro, setEstadoFiltro] = useState('') 
+const [filtroEmpacado, setFiltroEmpacado] = useState('')
 const [mensajeroFiltro, setMensajeroFiltro] = useState('')
 const [tipoFiltro, setTipoFiltro] = useState('')
   const [actualizados, setActualizados] = useState({})
@@ -459,6 +460,111 @@ const limpiarFiltros = () => {
   setMensajeroFiltro('')
   setTipoFiltro('')
 
+} 
+
+
+  const obtenerEstadoVisual = (envio) => {
+
+  if (!envio.fecha) return envio.estado
+
+  const hoy = new Date()
+
+  const hoyLocal = new Date(
+    hoy.getTime() -
+    hoy.getTimezoneOffset() * 60000
+  )
+
+  const hoyStr =
+    hoyLocal.toISOString().split('T')[0]
+
+  if (envio.fecha !== hoyStr) {
+    return envio.estado
+  }
+
+  if (envio.estado === 'Mañana en la mañana') {
+    return 'En la mañana'
+  }
+
+  if (envio.estado === 'Mañana en la tarde') {
+    return 'En la tarde'
+  }
+
+  return envio.estado
+
+} 
+
+
+const obtenerNombreDia = (fecha) => {
+
+  if (!fecha) return ''
+
+  const hoy = new Date()
+
+  const hoyLocal = new Date(
+    hoy.getTime() -
+      hoy.getTimezoneOffset() * 60000
+  )
+
+  const hoyStr =
+    hoyLocal.toISOString().split('T')[0]
+
+  const manana = new Date(hoyLocal)
+
+  manana.setDate(
+    manana.getDate() + 1
+  )
+
+  const mananaStr =
+    manana.toISOString().split('T')[0]
+
+  const ayer = new Date(hoyLocal)
+
+  ayer.setDate(
+    ayer.getDate() - 1
+  )
+
+  const ayerStr =
+    ayer.toISOString().split('T')[0]
+
+  // AYER
+  if (fecha === ayerStr) {
+    return 'AYER'
+  }
+
+  // HOY
+  if (fecha === hoyStr) {
+    return 'HOY'
+  }
+
+  // MAÑANA
+  if (fecha === mananaStr) {
+    return 'MAÑANA'
+  }
+
+  // Cualquier otro día
+  const [anio, mes, dia] = fecha.split('-')
+
+  const fechaLocal = new Date(
+    Number(anio),
+    Number(mes) - 1,
+    Number(dia)
+  )
+
+  return fechaLocal
+    .toLocaleDateString('es-CR', {
+      weekday: 'long'
+    })
+    .toUpperCase()
+} 
+
+
+const obtenerFechaVisual = (fecha) => {
+
+  if (!fecha) return ''
+
+  const [anio, mes, dia] = fecha.split('-')
+
+  return `${dia}/${mes}/${anio}`
 }
 
   /* ---------- FILTRADO ---------- */
@@ -509,7 +615,24 @@ if (fechaHasta) {
         normalizarTexto(e.estado) ===
         estadoNorm
     )
-  }
+  } 
+
+// ---------- FILTRO EMPACADO ----------
+if (filtroEmpacado === 'empacados') {
+
+  datos = datos.filter(
+    (e) => e.completado === true
+  )
+
+}
+
+if (filtroEmpacado === 'pendientes') {
+
+  datos = datos.filter(
+    (e) => e.completado !== true
+  )
+
+}
 
 // TIPO
 if (tipoFiltro) {
@@ -561,51 +684,63 @@ if (tipoFiltro) {
   const mananaStr =
     manana.toISOString().split('T')[0]
 
-  const obtenerPrioridad = (envio) => {
-    const fecha = envio.fecha
+const obtenerPrioridad = (envio) => {
 
-    if (
-      !fecha ||
-      isNaN(new Date(fecha).getTime())
-    ) {
-      return 6
-    }
+  const estadoVisual = obtenerEstadoVisual(envio)
 
-    // Hoy mañana
-    if (
-      envio.estado === 'En la mañana' &&
-      fecha === hoyStr
-    ) {
-      return 1
-    }
+  const fecha = envio.fecha
 
-    // Hoy tarde
-    if (
-      envio.estado === 'En la tarde' &&
-      fecha === hoyStr
-    ) {
-      return 2
-    }
+  if (
+    !fecha ||
+    isNaN(new Date(fecha).getTime())
+  ) {
+    return 7
+  }
 
-    // Mañana
-    if (
-      envio.estado === 'Mañana' ||
-      fecha === mananaStr
-    ) {
-      return 3
-    }
+  const fechaObj = new Date(fecha)
+  const hoyObj = new Date(hoyStr)
 
-    const fechaObj = new Date(fecha)
-    const hoyObj = new Date(hoyStr)
+  // 1. Hoy en la mañana
+  if (
+    estadoVisual === 'En la mañana' &&
+    fecha === hoyStr
+  ) {
+    return 1
+  }
 
-    // Futuras
-    if (fechaObj > hoyObj) {
-      return 4
-    }
+  // 2. Hoy en la tarde
+  if (
+    estadoVisual === 'En la tarde' &&
+    fecha === hoyStr
+  ) {
+    return 2
+  }
 
-    // Pasadas
+  // 3. Mañana en la mañana
+  if (
+    envio.estado === 'Mañana en la mañana' &&
+    fecha > hoyStr
+  ) {
+    return 3
+  }
+
+  // 4. Mañana en la tarde
+  if (
+    envio.estado === 'Mañana en la tarde' &&
+    fecha > hoyStr
+  ) {
+    return 4
+  }
+
+  // 5. Otras fechas futuras
+  if (fechaObj > hoyObj) {
     return 5
   }
+
+  // 6. Fechas pasadas
+  return 6
+
+}
 
   datos.sort((a, b) => {
     const prioridadA =
@@ -631,19 +766,20 @@ if (tipoFiltro) {
         : null
 
     // Futuras
-    if (prioridadA === 4) {
-      return fechaA - fechaB
-    }
+  // Futuras
+if (prioridadA === 5) {
+  return fechaA - fechaB
+}
 
-    // Pasadas
-    if (prioridadA === 5) {
-      return fechaB - fechaA
-    }
+// Pasadas
+if (prioridadA === 6) {
+  return fechaB - fechaA
+}
 
-    // Invalid Date
-    if (prioridadA === 6) {
-      return 0
-    }
+// Invalid Date
+if (prioridadA === 7) {
+  return 0
+}
 
     return 0
   })
@@ -655,7 +791,8 @@ if (tipoFiltro) {
   busqueda,
   fechaDesde,
   fechaHasta,
-  estadoFiltro,
+  estadoFiltro, 
+  filtroEmpacado,
   mensajeroFiltro,
   tipoFiltro
 ])
@@ -700,14 +837,22 @@ const cambiarEstado = async (id, nuevoEstado) => {
 
   let nuevaFecha
 
-  if (nuevoEstado === 'Mañana') {
-    const manana = new Date(hoyLocal)
-    manana.setDate(manana.getDate() + 1)
-    nuevaFecha = manana.toISOString().split('T')[0]
-  } else {
-    nuevaFecha = hoyLocal.toISOString().split('T')[0]
-  }
+if (
+  nuevoEstado === 'Mañana en la mañana' ||
+  nuevoEstado === 'Mañana en la tarde'
+) {
 
+  const manana = new Date(hoyLocal)
+
+  manana.setDate(manana.getDate() + 1)
+
+  nuevaFecha = manana.toISOString().split('T')[0]
+
+} else {
+
+  nuevaFecha = hoyLocal.toISOString().split('T')[0]
+
+}
   // Actualización inmediata de la tabla
   const envioActual = envios.find(e => e.id === id)
 
@@ -985,7 +1130,10 @@ const marcarDescripcionRevisada = async (id) => {
     if (d.isSame(ayer, 'day')) return 'Ayer'
 
     return d.format('DD/MM/YYYY')
-  }
+  } 
+
+
+
 
   /* ---------- MODAL ---------- */
   const abrirEditarEnvio = (envio) => { 
@@ -1242,11 +1390,31 @@ Notas: *${e.notas || '-'}*\n\n`
       className="w-44 px-4 py-2 rounded-md border border-gray-300"
     >
       <option value="">Todos</option>
-      <option value="En la mañana">En la mañana</option>
-      <option value="En la tarde">En la tarde</option>
-      <option value="Mañana">Mañana</option>
-    </select>
-  </div>
+
+<option value="En la mañana">
+  En la mañana
+</option>
+
+<option value="En la tarde">
+  En la tarde
+</option>
+
+<option value="Mañana en la mañana">
+  Mañana en la mañana
+</option>
+
+<option value="Mañana en la tarde">
+  Mañana en la tarde
+</option> 
+
+<option value="Otra fecha">
+  Otra fecha
+</option>
+    </select> 
+
+
+  </div> 
+
 
   {/* Mensajero */}
   <div className="flex flex-col">
@@ -1281,7 +1449,33 @@ Notas: *${e.notas || '-'}*\n\n`
       ))}
 
     </select>
-  </div>
+  </div> 
+
+
+  
+      {/* FILTRO EMPACADO */} 
+      <div className="flex flex-col">
+    <label className="text-xs text-gray-500 mb-1">
+      Empacados
+    </label>
+ <select
+  value={filtroEmpacado}
+  onChange={(e) => setFiltroEmpacado(e.target.value)}
+  className="px-3 py-2 rounded-md border border-gray-300"
+>
+  <option value="">
+    Empacado: Todos
+  </option>
+
+  <option value="pendientes">
+    Empacado: Pendientes
+  </option>
+
+  <option value="empacados">
+    Empacado: Empacados
+  </option>
+</select>
+ </div>
 
   {/* Tipo */}
   <div className="flex flex-col">
@@ -1495,30 +1689,91 @@ Notas: *${e.notas || '-'}*\n\n`
 
   <div className="flex items-center justify-center gap-6">
 
-    {/* ESTADO */}
-   <select
-  value={envio.estado ?? ''}
-  onChange={(e) =>
-    cambiarEstado(
-      envio.id,
-      e.target.value
-    )
-  }
-  className={`
-    px-2 py-1 rounded text-xs font-semibold w-fit
-    ${
-      envio.estado === 'En la mañana'
-        ? 'bg-green-200 text-green-800'
-        : envio.estado === 'En la tarde'
-        ? 'bg-yellow-200 text-yellow-800'
-        : 'bg-blue-200 text-blue-800'
+  
+{/* ESTADO */}
+
+{envio.estado === 'Otra fecha' ? (
+
+  <span
+    className="
+      inline-flex
+      items-center
+      justify-center
+      px-13
+      py-1
+      rounded
+      text-xs
+      font-semibold
+      w-fit
+      bg-gray-200
+      text-gray-700
+      whitespace-nowrap
+    "
+  >
+    Otra fecha
+  </span>
+
+) : (
+
+  <select
+    value={envio.estado ?? ''}
+    onChange={(e) =>
+      cambiarEstado(
+        envio.id,
+        e.target.value
+      )
     }
-  `}
->
-  <option>En la mañana</option>
-  <option>En la tarde</option>
-  <option>Mañana</option>
-</select>
+    className={`
+      px-2 py-1 rounded text-xs font-semibold w-fit
+      border border-transparent
+      cursor-pointer
+      outline-none
+      transition-colors
+      ${
+        envio.estado === 'En la mañana'
+          ? 'bg-green-200 text-green-800'
+          : envio.estado === 'En la tarde'
+          ? 'bg-yellow-200 text-yellow-800'
+          : envio.estado === 'Mañana en la mañana'
+          ? 'bg-blue-200 text-blue-800'
+          : envio.estado === 'Mañana en la tarde'
+          ? 'bg-purple-200 text-purple-800'
+          : 'bg-gray-200 text-gray-700'
+      }
+    `}
+  >
+
+    <option
+      value="En la mañana"
+      className="bg-green-200 text-green-800"
+    >
+      En la mañana
+    </option>
+
+    <option
+      value="En la tarde"
+      className="bg-yellow-200 text-yellow-800"
+    >
+      En la tarde
+    </option>
+
+    <option
+      value="Mañana en la mañana"
+      className="bg-blue-200 text-blue-800"
+    >
+      Mañana en la mañana
+    </option>
+
+    <option
+      value="Mañana en la tarde"
+      className="bg-purple-200 text-purple-800"
+    >
+      Mañana en la tarde
+    </option>
+
+  </select>
+
+)}
 
 {/* CONTENEDOR DE TOGGLES */}
 <div className="flex items-center gap-4 w-[75px] justify-start">
@@ -1610,8 +1865,20 @@ Notas: *${e.notas || '-'}*\n\n`
 </div>
 </td>
 
-              {/* FECHA */}
-              <td className="p-3">{formatearFecha(envio.fecha)}</td>
+{/* ---------- FECHA ---------- */}
+<td className="text-center align-middle">
+  <div className="flex flex-col items-center justify-center gap-1 py-2 min-w-[110px]">
+    
+    <span className="text-xs font-bold uppercase text-gray-600">
+      {obtenerNombreDia(envio.fecha)}
+    </span>
+
+    <span className="text-sm font-semibold text-gray-800">
+      {obtenerFechaVisual(envio.fecha)}
+    </span>
+
+  </div>
+</td>
 
               {/* ACCIONES */}
               <td className="p-3 flex gap-3">
