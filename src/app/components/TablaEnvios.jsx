@@ -209,19 +209,114 @@ const { data, error } = await query
   data.length
 )
 
-    setEnvios(data || [])
+    /* ---------- ACTUALIZAR ESTADOS AUTOMÁTICAMENTE ---------- */
 
-    setActualizados((prev) => {
-      const nuevo = { ...prev }
+let datosFinales = [...(data || [])]
 
-      data?.forEach((e) => {
-        if (e.actualizado && !nuevo[e.id]) {
-          nuevo[e.id] = true
+const cambiosAutomaticos = datosFinales.filter((envio) => {
+
+  const nuevoEstado =
+    obtenerEstadoAutomatico(envio)
+
+  return (
+    nuevoEstado &&
+    nuevoEstado !== envio.estado
+  )
+
+})
+
+/* ---------- GUARDAR CAMBIOS EN SUPABASE ---------- */
+
+if (cambiosAutomaticos.length > 0) {
+
+  const gruposEstados = {}
+
+  cambiosAutomaticos.forEach((envio) => {
+
+    const nuevoEstado =
+      obtenerEstadoAutomatico(envio)
+
+    if (!gruposEstados[nuevoEstado]) {
+      gruposEstados[nuevoEstado] = []
+    }
+
+    gruposEstados[nuevoEstado].push(envio.id)
+
+  })
+
+
+  for (const [nuevoEstado, ids] of Object.entries(
+    gruposEstados
+  )) {
+
+    const { error: errorEstado } =
+      await supabase
+        .from('envios')
+        .update({
+          estado: nuevoEstado,
+
+          origen_navegador:
+            sessionStorage.getItem(
+              'navegador_id'
+            ),
+
+          updated_at:
+            new Date().toISOString()
+        })
+        .in('id', ids)
+
+    if (errorEstado) {
+
+      console.error(
+        'Error actualizando estados automáticos:',
+        errorEstado
+      )
+
+      continue
+    }
+
+
+    /* Actualizar también nuestra copia local */
+
+    datosFinales = datosFinales.map((envio) => {
+
+      const nuevoEstadoEnvio =
+        obtenerEstadoAutomatico(envio)
+
+      if (
+        ids.includes(envio.id) &&
+        nuevoEstadoEnvio === nuevoEstado
+      ) {
+
+        return {
+          ...envio,
+          estado: nuevoEstado
         }
-      })
 
-      return nuevo
+      }
+
+      return envio
+
     })
+
+  }
+
+}
+
+
+setEnvios(datosFinales)
+
+setActualizados((prev) => {
+  const nuevo = { ...prev }
+
+  datosFinales?.forEach((e) => {
+    if (e.actualizado && !nuevo[e.id]) {
+      nuevo[e.id] = true
+    }
+  })
+
+  return nuevo
+})
 
   } catch (err) {
     console.error(err)
@@ -493,6 +588,74 @@ const limpiarFiltros = () => {
 
 } 
 
+
+/* ---------- ESTADO AUTOMÁTICO ---------- */
+const obtenerEstadoAutomatico = (envio) => {
+
+  if (!envio?.fecha) {
+    return envio?.estado
+  }
+
+  const hoy = new Date()
+
+  const hoyLocal = new Date(
+    hoy.getTime() -
+      hoy.getTimezoneOffset() * 60000
+  )
+
+  const hoyStr =
+    hoyLocal.toISOString().split('T')[0]
+
+  const manana = new Date(hoyLocal)
+
+  manana.setDate(
+    manana.getDate() + 1
+  )
+
+  const mananaStr =
+    manana.toISOString().split('T')[0]
+
+
+  /* ---------- OTRA FECHA ---------- */
+
+  if (envio.estado === 'Otra fecha') {
+
+    // Si la fecha es mañana
+    if (envio.fecha === mananaStr) {
+      return 'Mañana en la mañana'
+    }
+
+    // Si la fecha ya es hoy
+    if (envio.fecha === hoyStr) {
+      return 'En la mañana'
+    }
+
+    return 'Otra fecha'
+  }
+
+
+  /* ---------- MAÑANA EN LA MAÑANA ---------- */
+
+  if (
+    envio.estado === 'Mañana en la mañana' &&
+    envio.fecha === hoyStr
+  ) {
+    return 'En la mañana'
+  }
+
+
+  /* ---------- MAÑANA EN LA TARDE ---------- */
+
+  if (
+    envio.estado === 'Mañana en la tarde' &&
+    envio.fecha === hoyStr
+  ) {
+    return 'En la tarde'
+  }
+
+
+  return envio.estado
+}
 
 const obtenerNombreDia = (fecha) => {
 
