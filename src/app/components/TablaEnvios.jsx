@@ -100,7 +100,9 @@ const TablaEnvios = forwardRef(({ refresh }, ref) => {
   const router = useRouter() 
 
   const navegadorId = useRef(null)  
-  const ultimoDeleteRef = useRef(null)
+  const ultimoDeleteRef = useRef(null)  
+  const primeraCargaRef = useRef(true)
+
   
 
 if (!navegadorId.current) {
@@ -129,11 +131,13 @@ const [tipoFiltro, setTipoFiltro] = useState('')
   const [animacionesListas, setAnimacionesListas] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isFirstLoad, setIsFirstLoad] = useState(true)
-  const [paginaActual, setPaginaActual] = useState(1)
+  const [paginaActual, setPaginaActual] = useState(1)  
+  const [totalEnvios, setTotalEnvios] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)   
   const [modoFormulario, setModoFormulario] = useState('editar')
   const [actualizandoCheck, setActualizandoCheck] = useState({})   
-  const [actualizandoFacturado, setActualizandoFacturado] = useState({})
+  const [actualizandoFacturado, setActualizandoFacturado] = useState({}) 
+
  
  
 
@@ -146,7 +150,8 @@ const ITEMS_POR_PAGINA = 45
   }, [])
 
   /* ---------- FETCH ---------- */
-  const fetchEnvios = async (showLoader = false) => {
+  const fetchEnvios = async (showLoader = false) => { 
+  
   try {
     if (showLoader) setLoading(true)
 
@@ -159,42 +164,24 @@ const ITEMS_POR_PAGINA = 45
       return
     }
 
-    // Buscar si el usuario pertenece a un grupo
-    const { data: grupoUsuario, error: grupoError } =
-      await supabase
-        .from('usuarios_grupo')
-        .select('grupo_id')
-        .eq('user_id', user.id)
-        .single()
 
-    let query = supabase
-      .from('envios')
-      .select('*')
+const pagina = paginaActual
+const porPagina = ITEMS_POR_PAGINA
 
-    // Usuario autorizado en grupo
-    if (grupoUsuario?.grupo_id) {
-      query = query.eq(
-        'grupo_id',
-        grupoUsuario.grupo_id
-      )
-    }
-    // Usuario independiente
-    else {
-      query = query.eq(
-        'user_id',
-        user.id
-      )
-    }
-
-const { data, error } = await query
-  .order('created_at', {
-    ascending: false
-  })
- 
-
-    if (grupoError && grupoError.code !== 'PGRST116') {
-      console.error(grupoError)
-    }
+const { data, error } = await supabase.rpc(
+  'obtener_envios_paginados',
+  {
+    p_pagina: pagina,
+    p_por_pagina: porPagina,
+    p_busqueda: busqueda || '',
+    p_fecha_desde: fechaDesde || null,
+    p_fecha_hasta: fechaHasta || null,
+    p_estado: estadoFiltro || '',
+    p_mensajero: mensajeroFiltro || '',
+    p_filtro_empacado: filtroEmpacado || '',
+    p_tipo: tipoFiltro || ''
+  }
+)
 
     if (error) {
       console.error(error)
@@ -202,12 +189,21 @@ const { data, error } = await query
       return
     }
 
-    console.log('USUARIO:', user.id)
-    console.log('GRUPO:', grupoUsuario?.grupo_id)
-    console.log(
+console.log(
   'ENVÍOS FETCH:',
-  data.length
+  data?.length || 0
 )
+
+console.log(
+  'TOTAL REAL FILTRADO:',
+  data?.[0]?.total_count || 0
+)
+
+setTotalEnvios(
+  Number(data?.[0]?.total_count || 0)
+) 
+
+
 
     /* ---------- ACTUALIZAR ESTADOS AUTOMÁTICAMENTE ---------- */
 
@@ -332,209 +328,326 @@ setActualizados((prev) => {
 }
 
   /* ---------- REALTIME ---------- */ 
-useEffect(() => { 
+useEffect(() => {
+  console.log('MONTA REALTIME')
 
-    console.log('MONTA REALTIME')
   fetchEnvios(true)
 
-  const canal = supabase
-    .channel('envios-realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'envios'
-      },
- (payload) => { 
+  setTimeout(() => {
+    primeraCargaRef.current = false
+  }, 0)
 
-    console.log(
-    'EVENTO REALTIME:',
-    payload.eventType,
-    payload
-  )  
+  let canal = null
+  let cancelado = false
 
-  console.log(
-  'PAYLOAD COMPLETO:',
-  JSON.stringify(payload)
-)
+  const configurarRealtime = async () => {
+    try {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser()
 
-console.log(
-  'ORIGEN:',
-  payload.new?.origen_navegador,
-  payload.old?.origen_navegador
-)
+      if (!user || cancelado) {
+        console.log(
+          'No hay usuario → Realtime no configurado'
+        )
+        return
+      }
 
-console.log(
-  'NAVEGADOR ACTUAL:',
-  navegadorId.current
-)
+      // Obtener grupo del usuario
+      const {
+        data: grupoUsuario,
+        error: errorGrupo
+      } = await supabase
+        .from('usuarios_grupo')
+        .select('grupo_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-  const origenEvento =
-  payload.new?.origen_navegador ||
-  payload.old?.origen_navegador
+      if (errorGrupo) {
+        console.error(
+          'Error obteniendo grupo:',
+          errorGrupo
+        )
+        return
+      }
 
-const esMiEvento =
-  origenEvento === navegadorId.current
+      if (cancelado) return
 
+      const grupoId = grupoUsuario?.grupo_id || null
 
- // INSERT
-if (payload.eventType === 'INSERT') {
+      console.log(
+        'GRUPO REALTIME:',
+        grupoId
+      )
 
-  guardarEnvioLocal(payload.new)
+      // Si pertenece a un grupo, escucha solamente ese grupo.
+      // Si no pertenece a un grupo, escucha solamente sus propios envíos.
+      const filtroRealtime = grupoId
+        ? `grupo_id=eq.${grupoId}`
+        : `user_id=eq.${user.id}`
 
-  if (!esMiEvento) {
-    toast.success('📦 Nuevo envío agregado')
-  }
+      console.log(
+        'FILTRO REALTIME:',
+        filtroRealtime
+      )
 
-  return
-}
+      canal = supabase
+        .channel('envios-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'envios',
+            filter: filtroRealtime
+          },
+          (payload) => {
 
-// DELETE
-if (payload.eventType === 'DELETE') {
+            console.log(
+              'EVENTO REALTIME:',
+              payload.eventType,
+              payload.new?.id || payload.old?.id
+            )
 
-  eliminarEnvioLocal(payload.old.id)
+            console.log(
+              'ORIGEN:',
+              payload.new?.origen_navegador,
+              payload.old?.origen_navegador
+            )
 
-  if (!esMiEvento) {
-    toast.success('🗑️ Se eliminó un envío')
-  }
+            console.log(
+              'NAVEGADOR ACTUAL:',
+              navegadorId.current
+            )
 
-  return
-}
+            const origenEvento =
+              payload.new?.origen_navegador ||
+              payload.old?.origen_navegador
 
-// EMPACADO
-if (
-  payload.eventType === 'UPDATE' &&
-  payload.new?.completado !==
-    payload.old?.completado
-) {
-
-
-actualizarEnvioLocal(payload.new)
-
-  if (!esMiEvento) {
-    toast.success(
-      payload.new.completado
-        ? '📦 Se empacó un envío'
-        : '📦 Se desmarcó un envío'
-    )
-  }
-
-  return
-} 
-
-
-// FACTURADO
-if (
-  payload.eventType === 'UPDATE' &&
-  payload.new?.facturado !==
-    payload.old?.facturado
-) {
-
-  actualizarEnvioLocal(payload.new)
-
-  if (!esMiEvento) {
-
-    toast.success(
-
-      payload.new.facturado
-
-        ? '🧾 Pedido facturado'
-
-        : '↩ Factura removida'
-
-    )
-
-  }
-
-  return
-}
-
- // DESCRIPCIÓN REVISADA
-if (
-  payload.eventType === 'UPDATE' &&
-  payload.new?.descripcion_editada !==
-    payload.old?.descripcion_editada
-) {
+            const esMiEvento =
+              origenEvento === navegadorId.current
 
 
-actualizarEnvioLocal(payload.new)
+            // INSERT
+            if (payload.eventType === 'INSERT') {
 
-  return
-}
+              guardarEnvioLocal(payload.new)
 
-// ACTUALIZACIÓN GENERAL
-if (payload.eventType === 'UPDATE') {
+              if (!esMiEvento) {
+                toast.success(
+                  '📦 Nuevo envío agregado'
+                )
+              }
 
-  
-actualizarEnvioLocal(payload.new)
+              return
+            }
 
-  if (!esMiEvento) {
-    toast.success('✏️ Se actualizó un envío')
-  }
 
-  return
-}
-}
-    )
-.subscribe((status) => {
+            // DELETE
+            if (payload.eventType === 'DELETE') {
 
-  console.log(
-    'Realtime status:',
-    status
-  )
+              eliminarEnvioLocal(
+                payload.old.id
+              )
 
-  if (
-    status === 'CHANNEL_ERROR' ||
-    status === 'TIMED_OUT'
-   
-  ) {
+              if (!esMiEvento) {
+                toast.success(
+                  '🗑️ Se eliminó un envío'
+                )
+              }
 
-    console.log(
-      'Realtime desconectado'
-    )
+              return
+            }
 
-    setTimeout(() => {
-      fetchEnvios(false)
-    }, 1000)
-  }
-})
- const handleVisibility = () => {
-    if (!document.hidden) {
-      console.log('Pestaña activa')
-      fetchEnvios(false)
+
+            // EMPACADO
+            if (
+              payload.eventType === 'UPDATE' &&
+              payload.new?.completado !==
+                payload.old?.completado
+            ) {
+
+              actualizarEnvioLocal(
+                payload.new
+              )
+
+              if (!esMiEvento) {
+                toast.success(
+                  payload.new.completado
+                    ? '📦 Se empacó un envío'
+                    : '📦 Se desmarcó un envío'
+                )
+              }
+
+              return
+            }
+
+
+            // FACTURADO
+            if (
+              payload.eventType === 'UPDATE' &&
+              payload.new?.facturado !==
+                payload.old?.facturado
+            ) {
+
+              actualizarEnvioLocal(
+                payload.new
+              )
+
+              if (!esMiEvento) {
+                toast.success(
+                  payload.new.facturado
+                    ? '🧾 Pedido facturado'
+                    : '↩ Factura removida'
+                )
+              }
+
+              return
+            }
+
+
+            // DESCRIPCIÓN REVISADA
+            if (
+              payload.eventType === 'UPDATE' &&
+              payload.new?.descripcion_editada !==
+                payload.old?.descripcion_editada
+            ) {
+
+              actualizarEnvioLocal(
+                payload.new
+              )
+
+              return
+            }
+
+
+            // ACTUALIZACIÓN GENERAL
+            if (
+              payload.eventType === 'UPDATE'
+            ) {
+
+              actualizarEnvioLocal(
+                payload.new
+              )
+
+              if (!esMiEvento) {
+                toast.success(
+                  '✏️ Se actualizó un envío'
+                )
+              }
+
+              return
+            }
+          }
+        )
+        .subscribe((status) => {
+
+          console.log(
+            'Realtime status:',
+            status
+          )
+
+          if (
+            status === 'CHANNEL_ERROR' ||
+            status === 'TIMED_OUT'
+          ) {
+
+            console.log(
+              'Realtime desconectado'
+            )
+
+            setTimeout(() => {
+              if (!cancelado) {
+                fetchEnvios(false)
+              }
+            }, 1000)
+          }
+        })
+
+    } catch (error) {
+
+      console.error(
+        'Error configurando Realtime:',
+        error
+      )
     }
   }
+
+  configurarRealtime()
+
+
+  const handleVisibility = () => {
+
+    if (!document.hidden) {
+
+      console.log(
+        'Pestaña activa'
+      )
+
+      if (
+        !canal ||
+        canal.state !== 'joined'
+      ) {
+
+        console.log(
+          'Realtime no conectado → sincronizando envíos'
+        )
+
+        fetchEnvios(false)
+
+      } else {
+
+        console.log(
+          'Realtime conectado → no hace falta sincronizar'
+        )
+      }
+    }
+  }
+
 
   document.addEventListener(
     'visibilitychange',
     handleVisibility
   )
 
-  // respaldo si realtime se desconecta
-const intervalo = setInterval(() => {
 
-  if (canal.state !== 'joined') {
+  // Respaldo si Realtime se desconecta
+  const intervalo = setInterval(() => {
 
-    console.log('Reactivando realtime...')
+    if (
+      canal &&
+      canal.state !== 'joined'
+    ) {
 
-    canal.subscribe()
+      console.log(
+        'Reactivando realtime...'
+      )
 
-    fetchEnvios(false)
-  }
+      canal.subscribe()
 
-}, 60000)
+      fetchEnvios(false)
+    }
+
+  }, 60000)
+
 
   return () => {
-    clearInterval(intervalo) 
 
-     document.removeEventListener(
+    cancelado = true
+
+    clearInterval(intervalo)
+
+    document.removeEventListener(
       'visibilitychange',
       handleVisibility
     )
-    supabase.removeChannel(canal)
+
+    if (canal) {
+      supabase.removeChannel(canal)
+    }
   }
-}, []) 
+
+}, [])
 
 
 
@@ -544,7 +657,8 @@ const hayFiltros =
   fechaHasta !== '' ||
   estadoFiltro !== '' ||
   mensajeroFiltro !== '' ||
-  tipoFiltro !== ''
+  tipoFiltro !== '' ||
+  filtroEmpacado !== ''
 
 const limpiarFiltros = () => {
 
@@ -554,8 +668,9 @@ const limpiarFiltros = () => {
   setEstadoFiltro('')
   setMensajeroFiltro('')
   setTipoFiltro('')
+  setFiltroEmpacado('')
 
-} 
+}
 
 
   const obtenerEstadoVisual = (envio) => {
@@ -730,265 +845,42 @@ const obtenerFechaVisual = (fecha) => {
   return `${dia}/${mes}/${anio}`
 }
 
-  /* ---------- FILTRADO ---------- */
+
 const enviosFiltradosOrdenados = useMemo(() => {
-  let datos = [...envios]
+  return [...envios]
+}, [envios])
 
-  // BUSCADOR
-  if (busqueda.trim()) {
-    const filtro = busqueda.toLowerCase()
+const totalPaginas = Math.ceil(
+  totalEnvios / ITEMS_POR_PAGINA
+)
 
-    datos = datos.filter((e) =>
-      Object.values(e).some((valor) =>
-        String(valor ?? '')
-          .toLowerCase()
-          .includes(filtro)
-      )
-    )
+const enviosPagina = enviosFiltradosOrdenados  
+
+
+useEffect(() => {
+  if (primeraCargaRef.current) return
+
+  if (paginaActual !== 1) {
+    setPaginaActual(1)
+    return
   }
 
-  // DESDE
-if (fechaDesde) {
-  datos = datos.filter(
-    (e) => e.fecha >= fechaDesde
-  )
-} 
-
-// HASTA
-if (fechaHasta) {
-  datos = datos.filter(
-    (e) => e.fecha <= fechaHasta
-  )
-}
-
-  // MENSAJERO
-  if (mensajeroFiltro) {
-    datos = datos.filter(
-      (e) => e.mensajero === mensajeroFiltro
-    )
-  }
-
-  // ESTADO
-  if (estadoFiltro) {
-    const estadoNorm =
-      normalizarTexto(estadoFiltro)
-
-    datos = datos.filter(
-      (e) =>
-        normalizarTexto(e.estado) ===
-        estadoNorm
-    )
-  } 
-
-// ---------- FILTRO EMPACADO ----------
-if (filtroEmpacado === 'empacados') {
-
-  datos = datos.filter(
-    (e) => e.completado === true
-  )
-
-}
-
-if (filtroEmpacado === 'pendientes') {
-
-  datos = datos.filter(
-    (e) => e.completado !== true
-  )
-
-}
-
-// TIPO
-if (tipoFiltro) {
-
-  datos = datos.filter((e) => {
-
-    switch (tipoFiltro) {
-
-      case 'pagina':
-        return (
-          !e.es_impresora &&
-          !e.es_whatsapp
-        )
-
-      case 'impresora':
-        return e.es_impresora
-
-      case 'whatsapp':
-        return e.es_whatsapp
-
-      default:
-        return true
-
-    }
-
-  })
-
-} 
-
-
-
-  // FECHAS DE REFERENCIA
-  const hoy = new Date()
-
-  const hoyLocal = new Date(
-    hoy.getTime() -
-      hoy.getTimezoneOffset() * 60000
-  )
-
-  const hoyStr =
-    hoyLocal.toISOString().split('T')[0]
-
-  const manana = new Date(hoyLocal)
-
-  manana.setDate(
-    manana.getDate() + 1
-  )
-
-  const mananaStr =
-    manana.toISOString().split('T')[0]
-
-const obtenerPrioridad = (envio) => {
-
-  const estadoVisual = obtenerEstadoVisual(envio)
-
-  const fecha = envio.fecha
-
-  if (
-    !fecha ||
-    isNaN(new Date(fecha).getTime())
-  ) {
-    return 7
-  }
-
-  const fechaObj = new Date(fecha)
-  const hoyObj = new Date(hoyStr)
-
-  // 1. Hoy en la mañana
-  if (
-    estadoVisual === 'En la mañana' &&
-    fecha === hoyStr
-  ) {
-    return 1
-  }
-
-  // 2. Hoy en la tarde
-  if (
-    estadoVisual === 'En la tarde' &&
-    fecha === hoyStr
-  ) {
-    return 2
-  }
-
-  // 3. Mañana en la mañana
-  if (
-    envio.estado === 'Mañana en la mañana' &&
-    fecha > hoyStr
-  ) {
-    return 3
-  }
-
-  // 4. Mañana en la tarde
-  if (
-    envio.estado === 'Mañana en la tarde' &&
-    fecha > hoyStr
-  ) {
-    return 4
-  }
-
-  // 5. Otras fechas futuras
-  if (fechaObj > hoyObj) {
-    return 5
-  }
-
-  // 6. Fechas pasadas
-  return 6
-
-}
-
-  datos.sort((a, b) => {
-    const prioridadA =
-      obtenerPrioridad(a)
-
-    const prioridadB =
-      obtenerPrioridad(b)
-
-    if (prioridadA !== prioridadB) {
-      return prioridadA - prioridadB
-    }
-
-    const fechaA =
-      a.fecha &&
-      !isNaN(new Date(a.fecha))
-        ? new Date(a.fecha).getTime()
-        : null
-
-    const fechaB =
-      b.fecha &&
-      !isNaN(new Date(b.fecha))
-        ? new Date(b.fecha).getTime()
-        : null
-
-    // Futuras
-  // Futuras
-if (prioridadA === 5) {
-  return fechaA - fechaB
-}
-
-// Pasadas
-if (prioridadA === 6) {
-  return fechaB - fechaA
-}
-
-// Invalid Date
-if (prioridadA === 7) {
-  return 0
-}
-
-    return 0
-  })
-
-  return datos
-
-}, [
-  envios,
-  busqueda,
-  fechaDesde,
-  fechaHasta,
-  estadoFiltro, 
-  filtroEmpacado,
-  mensajeroFiltro,
-  tipoFiltro
-])
-
-  const totalPaginas = Math.ceil(
-    enviosFiltradosOrdenados.length / ITEMS_POR_PAGINA
-  )
-
-  const enviosPagina = enviosFiltradosOrdenados.slice(
-    (paginaActual - 1) * ITEMS_POR_PAGINA,
-    paginaActual * ITEMS_POR_PAGINA
-  )
-
- useEffect(() => {
-  setPaginaActual(1)
+  fetchEnvios(false)
 }, [
   busqueda,
   fechaDesde,
   fechaHasta,
   estadoFiltro,
   mensajeroFiltro,
-  tipoFiltro
-]) 
+  tipoFiltro,
+  filtroEmpacado
+])
 
-  useEffect(() => {
-  if (
-    paginaActual > totalPaginas &&
-    totalPaginas > 0
-  ) {
-    setPaginaActual(totalPaginas)
-  }
-}, [paginaActual, totalPaginas])   
+useEffect(() => {
+  if (primeraCargaRef.current) return
 
+  fetchEnvios(false)
+}, [paginaActual])
 
   /* ---------- CAMBIAR ESTADO ---------- */
 const cambiarEstado = async (id, nuevoEstado) => {
@@ -1401,17 +1293,49 @@ const guardarEnvio = async (envio) => {
 
 
   /* ---------- EXPORTAR ---------- */
-  const exportarExcel = (soloFiltrados) => {
-    const datos = soloFiltrados
-      ? enviosFiltradosOrdenados
-      : envios
+const exportarExcel = async (soloFiltrados) => {
+  try {
+    const { data, error } = await supabase.rpc(
+      'obtener_envios_para_exportar',
+      {
+        p_busqueda: soloFiltrados ? busqueda || '' : '',
+        p_fecha_desde: soloFiltrados
+          ? fechaDesde || null
+          : null,
+        p_fecha_hasta: soloFiltrados
+          ? fechaHasta || null
+          : null,
+        p_estado: soloFiltrados
+          ? estadoFiltro || ''
+          : '',
+        p_mensajero: soloFiltrados
+          ? mensajeroFiltro || ''
+          : '',
+        p_filtro_empacado: soloFiltrados
+          ? filtroEmpacado || ''
+          : '',
+        p_tipo: soloFiltrados
+          ? tipoFiltro || ''
+          : ''
+      }
+    )
 
-    if (!datos || datos.length === 0) {
+    if (error) {
+      console.error(
+        'Error obteniendo envíos para exportar:',
+        error
+      )
+
+      toast.error('Error preparando el Excel')
+      return
+    }
+
+    if (!data || data.length === 0) {
       toast.error('No hay envíos para exportar')
       return
     }
 
-    const datosLimpios = datos.map((e) => ({
+    const datosLimpios = data.map((e) => ({
       Cliente: e.cliente || '',
       Provincia: e.provincia || '',
       Teléfono: e.telefono || '',
@@ -1424,11 +1348,17 @@ const guardarEnvio = async (envio) => {
       Completado: e.completado ? 'Sí' : 'No'
     }))
 
-    const hoja = XLSX.utils.json_to_sheet(datosLimpios)
+    const hoja = XLSX.utils.json_to_sheet(
+      datosLimpios
+    )
 
     const libro = XLSX.utils.book_new()
 
-    XLSX.utils.book_append_sheet(libro, hoja, 'Envios')
+    XLSX.utils.book_append_sheet(
+      libro,
+      hoja,
+      'Envios'
+    )
 
     const nombre = soloFiltrados
       ? 'envios_filtrados.xlsx'
@@ -1439,10 +1369,24 @@ const guardarEnvio = async (envio) => {
       type: 'array'
     })
 
-    saveAs(new Blob([archivoExcel]), nombre)
+    saveAs(
+      new Blob([archivoExcel]),
+      nombre
+    )
 
-    toast.success('📄 Excel generado correctamente')
+    toast.success(
+      `📄 Excel generado correctamente (${data.length} envíos)`
+    )
+
+  } catch (err) {
+    console.error(
+      'Error exportando Excel:',
+      err
+    )
+
+    toast.error('Error generando el Excel')
   }
+} 
 
   /* ---------- COPIAR ---------- */
   const copiarEnvio = async (e) => {
@@ -1462,18 +1406,51 @@ Notas: *${e.notas || '-'}*
   }
 
   /* ---------- COPIAR FILTRADOS ---------- */
-  const copiarEnviosFiltrados = async () => {
-    if (!mensajeroFiltro || enviosFiltradosOrdenados.length === 0) {
+const copiarEnviosFiltrados = async () => {
+  try {
+    if (!mensajeroFiltro) {
       toast.error(
-        'Debe seleccionar un mensajero y tener envíos filtrados'
+        'Debe seleccionar un mensajero'
       )
 
       return
     }
 
-    let msg = `📦 *Envíos Mensajero* *${mensajeroFiltro}*\n\n`
+    const { data, error } = await supabase.rpc(
+      'obtener_envios_para_exportar',
+      {
+        p_busqueda: busqueda || '',
+        p_fecha_desde: fechaDesde || null,
+        p_fecha_hasta: fechaHasta || null,
+        p_estado: estadoFiltro || '',
+        p_mensajero: mensajeroFiltro || '',
+        p_filtro_empacado: filtroEmpacado || '',
+        p_tipo: tipoFiltro || ''
+      }
+    )
 
-    enviosFiltradosOrdenados.forEach((e, i) => {
+    if (error) {
+      console.error(
+        'Error obteniendo envíos para copiar:',
+        error
+      )
+
+      toast.error('Error obteniendo los envíos')
+      return
+    }
+
+    if (!data || data.length === 0) {
+      toast.error(
+        'No hay envíos filtrados'
+      )
+
+      return
+    }
+
+    let msg =
+      `📦 *Envíos Mensajero* *${mensajeroFiltro}*\n\n`
+
+    data.forEach((e, i) => {
       msg += `${i + 1}. *${e.cliente || '-'}*
 Provincia: ${e.provincia || '-'}
 Teléfono: ${e.telefono || '-'}
@@ -1481,10 +1458,25 @@ Ubicación: ${e.ubicacion || '-'}
 Notas: *${e.notas || '-'}*\n\n`
     })
 
-    await navigator.clipboard.writeText(msg.trim())
+    await navigator.clipboard.writeText(
+      msg.trim()
+    )
 
-    toast.success('✔ Envíos copiados')
+    toast.success(
+      `✔ ${data.length} envíos copiados`
+    )
+
+  } catch (err) {
+    console.error(
+      'Error copiando envíos:',
+      err
+    )
+
+    toast.error(
+      'No se pudieron copiar los envíos'
+    )
   }
+}
 
   /* ---------- LOADING ---------- */
   if (loading && isFirstLoad) {
@@ -1726,7 +1718,8 @@ Notas: *${e.notas || '-'}*\n\n`
       </div>
 
       {/* TABLA */}
-      <table className="min-w-full text-sm text-left table-auto">
+      <div className="overflow-x-auto">
+  <table className="min-w-full text-sm text-left table-auto">
         <thead className="bg-gray-200 uppercase text-xs font-bold text-zinc-900 border-b border-gray-500">
           <tr>
             {[
@@ -2074,9 +2067,11 @@ Notas: *${e.notas || '-'}*\n\n`
             </tr>
           ))}
         </tbody>
-      </table>
-      {/* PAGINACIÓN */}
-      <div className="flex justify-center items-center gap-2 py-4">
+     </table>
+</div>
+
+{/* PAGINACIÓN */}
+<div className="w-full flex justify-center items-center gap-2 py-4 flex-wrap">
         <button
           onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
           disabled={paginaActual === 1}
