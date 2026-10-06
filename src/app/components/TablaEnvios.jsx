@@ -101,9 +101,22 @@ const TablaEnvios = forwardRef(({ refresh }, ref) => {
 
   const navegadorId = useRef(null)  
   const ultimoDeleteRef = useRef(null)  
-  const primeraCargaRef = useRef(true)
+ const primeraCargaRef = useRef(true)
+
+const filtrosRef = useRef({
+  busqueda: '',
+  fechaDesde: '',
+  fechaHasta: '',
+  estadoFiltro: '',
+  mensajeroFiltro: '',
+  filtroEmpacado: '',
+  tipoFiltro: ''
+})
+
+const paginaActualRef = useRef(1)
 
   
+
 
 if (!navegadorId.current) {
   navegadorId.current =
@@ -136,7 +149,31 @@ const [tipoFiltro, setTipoFiltro] = useState('')
   const [modalOpen, setModalOpen] = useState(false)   
   const [modoFormulario, setModoFormulario] = useState('editar')
   const [actualizandoCheck, setActualizandoCheck] = useState({})   
-  const [actualizandoFacturado, setActualizandoFacturado] = useState({}) 
+  const [actualizandoFacturado, setActualizandoFacturado] = useState({})  
+
+
+  useEffect(() => {
+  filtrosRef.current = {
+    busqueda,
+    fechaDesde,
+    fechaHasta,
+    estadoFiltro,
+    mensajeroFiltro,
+    filtroEmpacado,
+    tipoFiltro
+  }
+
+  paginaActualRef.current = paginaActual
+}, [
+  busqueda,
+  fechaDesde,
+  fechaHasta,
+  estadoFiltro,
+  mensajeroFiltro,
+  filtroEmpacado,
+  tipoFiltro,
+  paginaActual
+])
 
  
  
@@ -165,7 +202,8 @@ const ITEMS_POR_PAGINA = 45
     }
 
 
-const pagina = paginaActual
+const filtrosActuales = filtrosRef.current
+const pagina = paginaActualRef.current
 const porPagina = ITEMS_POR_PAGINA
 
 const { data, error } = await supabase.rpc(
@@ -173,13 +211,14 @@ const { data, error } = await supabase.rpc(
   {
     p_pagina: pagina,
     p_por_pagina: porPagina,
-    p_busqueda: busqueda || '',
-    p_fecha_desde: fechaDesde || null,
-    p_fecha_hasta: fechaHasta || null,
-    p_estado: estadoFiltro || '',
-    p_mensajero: mensajeroFiltro || '',
-    p_filtro_empacado: filtroEmpacado || '',
-    p_tipo: tipoFiltro || ''
+    p_busqueda: filtrosActuales.busqueda || '',
+    p_fecha_desde: filtrosActuales.fechaDesde || null,
+    p_fecha_hasta: filtrosActuales.fechaHasta || null,
+    p_estado: filtrosActuales.estadoFiltro || '',
+    p_mensajero: filtrosActuales.mensajeroFiltro || '',
+    p_filtro_empacado:
+      filtrosActuales.filtroEmpacado || '',
+    p_tipo: filtrosActuales.tipoFiltro || ''
   }
 )
 
@@ -1680,7 +1719,7 @@ Notas: *${e.notas || '-'}*\n\n`
       fontWeight: 'bold'
     }}
   >
-    🔍 Se encontraron {enviosFiltradosOrdenados.length} envíos
+    🔍 Se encontraron {totalEnvios} envíos
   </div>
 )}
 
