@@ -2,7 +2,16 @@
 
 
 import { supabase } from '@/app/lib/supabase'
-import { Pencil, Trash2, Check, Copy, Receipt } from 'lucide-react'
+import {
+  Pencil,
+  Trash2,
+  Check,
+  Copy,
+  Receipt,
+  Package,
+  ClipboardCopy
+} from 'lucide-react' 
+
 import { toast } from 'sonner'
 import dayjs from 'dayjs'
 import RegistroEnvioForm from './RegistroEnvioForm'
@@ -1444,6 +1453,32 @@ Notas: *${e.notas || '-'}*
     toast.success('✔ Envío copiado')
   }
 
+
+const copiarEncomienda = async (e) => {
+  try {
+    const texto = [
+      e.provincia || '',
+      '',
+      e.ubicacion || '',
+      '',
+      'Envia: Pritonic',
+      '',
+      `Para: ${e.cliente || ''}`,
+      '',
+      e.telefono || ''
+    ].join('\n')
+
+    await navigator.clipboard.writeText(texto)
+
+    toast.success('📦 Datos de encomienda copiados')
+  } catch (error) {
+    console.error('Error copiando encomienda:', error)
+
+    toast.error('No se pudieron copiar los datos')
+  }
+}
+
+
   /* ---------- COPIAR FILTRADOS ---------- */
 const copiarEnviosFiltrados = async () => {
   try {
@@ -1685,7 +1720,8 @@ Notas: *${e.notas || '-'}*\n\n`
       <option value="">Todos</option>
       <option value="pagina">📦 Página</option>
       <option value="impresora">🖨 Impresora</option>
-      <option value="whatsapp">💬 WhatsApp</option>
+      <option value="whatsapp">💬 WhatsApp</option> 
+      <option value="encomienda">📦 Encomienda</option>
     </select>
   </div> 
 
@@ -1787,30 +1823,41 @@ Notas: *${e.notas || '-'}*\n\n`
       : 'bg-pink-50 hover:bg-pink-100'
     : envio.es_impresora
       ? 'bg-blue-50 hover:bg-blue-100'
-      : 'bg-white hover:bg-gray-100'
+      : envio.es_encomienda
+        ? 'bg-orange-50 hover:bg-orange-100'
+        : 'bg-white hover:bg-gray-100'
 }`}
 >
               <td className="p-3 break-words max-w-[180px]">
-  <div className="flex items-center gap-2">
-    {envio.es_impresora && (
-      <FaPrint
-        size={18}
-        className="text-blue-600 flex-shrink-0"
-        title="Impresora 3D"
-      />
-    )} 
+<div className="flex items-center gap-2">
 
-    {envio.es_whatsapp && (
-      <FaWhatsapp 
+  {envio.es_impresora && (
+    <FaPrint
+      size={18}
+      className="text-blue-600 flex-shrink-0"
+      title="Impresora 3D"
+    />
+  )}
+
+  {envio.es_whatsapp && (
+    <FaWhatsapp
       size={20}
-        className="text-green-600"
-        title="Pedido WhatsApp"
-      />
-    )}
+      className="text-green-600"
+      title="Pedido WhatsApp"
+    />
+  )}
 
+  {envio.es_encomienda && (
+    <Package
+      size={19}
+      className="text-orange-600 flex-shrink-0"
+      title="Encomienda"
+    />
+  )}
 
-    <span>{envio.cliente}</span>
-  </div>
+  <span>{envio.cliente}</span>
+
+</div>
 </td>
               <td className="p-3 break-words max-w-[150px]">{envio.provincia}</td>
               <td className="p-3 break-words max-w-[140px]">{envio.telefono}</td>
@@ -1971,7 +2018,7 @@ Notas: *${e.notas || '-'}*\n\n`
 )}
 
 {/* CONTENEDOR DE TOGGLES */}
-<div className="flex items-center gap-4 w-[75px] justify-start">
+<div className="flex items-center gap-4 w-[115px] justify-start">
 
   {/* COMPLETADO */}
 
@@ -2055,6 +2102,33 @@ Notas: *${e.notas || '-'}*\n\n`
     </button>
 
   )}
+
+{/* COPIAR ENCOMIENDA */}
+{envio.es_encomienda && (
+  <button
+    onClick={() => copiarEncomienda(envio)}
+    title="Copiar datos de encomienda"
+    className="
+      flex items-center justify-center
+      w-8 h-8
+      min-w-[32px]
+      min-h-[32px]
+      rounded-full
+      border
+      bg-white
+      text-orange-600
+      border-orange-400
+      hover:bg-orange-50
+      transition-colors
+    "
+  >
+    <ClipboardCopy
+      size={15}
+      strokeWidth={2.8}
+    />
+  </button>
+)}
+
 
 </div>
 </div>
